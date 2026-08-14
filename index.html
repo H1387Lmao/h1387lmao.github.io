@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Anoto To?</title>
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- Howler.js: streams audio via the native <audio> element (HTTP range requests) instead of
+     decoding the whole file up front, so short clips start playing almost instantly. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -769,6 +772,292 @@ a {
   #app.open #panel { transform: translateY(0); }
 }
 
+/* ===================== Music Quiz ===================== */
+.game-launcher {
+  position: fixed;
+  top: 22px; left: 22px;
+  z-index: 40;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(9,6,13,0.75);
+  border: 1px solid rgba(224,85,85,.35);
+  color: rgba(255,225,225,.85);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform .25s var(--ease-soft), border-color .25s, background .25s, box-shadow .25s;
+  animation: charIn .8s var(--ease) .7s both;
+}
+.game-launcher:hover {
+  transform: translateY(-2px) scale(1.05);
+  border-color: rgba(224,85,85,.7);
+  box-shadow: 0 0 18px rgba(224,85,85,.35);
+}
+.game-launcher svg { width: 20px; height: 20px; }
+
+.quiz-wrap { display: flex; flex-direction: column; gap: 16px; }
+
+.quiz-intro { font-size: 12px; color: rgba(200,160,160,.6); margin-bottom: 2px; }
+
+.quiz-visual {
+  display: flex; align-items: center; justify-content: center;
+  gap: 18px;
+  padding: 22px 10px;
+}
+.quiz-disc {
+  width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
+  background: radial-gradient(circle at 50% 50%, #1c1420 0%, #0c0810 60%, #0c0810 100%);
+  border: 1px solid rgba(255,255,255,.08);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--cc, #cc3333);
+  position: relative;
+}
+.quiz-disc::before {
+  content: '';
+  position: absolute; inset: 8px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255,255,255,.08);
+}
+.quiz-disc.spinning { animation: quizspin 2.6s linear infinite; }
+@keyframes quizspin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+.quiz-play-btn {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: var(--cc, #cc3333);
+  border: none; color: #fff; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .15s, opacity .15s;
+  box-shadow: 0 0 0 rgba(0,0,0,0);
+}
+.quiz-play-btn:hover { transform: scale(1.08); }
+.quiz-play-btn:disabled { opacity: .35; cursor: default; transform: none; }
+.quiz-play-btn svg { width: 20px; height: 20px; }
+
+.quiz-progress { display: flex; gap: 6px; }
+.quiz-dot {
+  flex: 1;
+  text-align: center;
+  padding: 6px 2px;
+  border-radius: 8px;
+  font-size: 10px; letter-spacing: .04em;
+  color: rgba(200,160,160,.4);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  transition: background .25s, border-color .25s, color .25s;
+}
+.quiz-dot.used { background: rgba(255,255,255,.03); color: rgba(200,160,160,.3); border-color: rgba(255,255,255,.05); }
+.quiz-dot.current {
+  background: color-mix(in srgb, var(--cc, #cc3333) 18%, transparent);
+  border-color: color-mix(in srgb, var(--cc, #cc3333) 55%, transparent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.quiz-guess-row { position: relative; display: flex; gap: 8px; }
+.quiz-input {
+  flex: 1; min-width: 0;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: #fff;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .2s, background .2s;
+}
+.quiz-input::placeholder { color: rgba(200,160,160,.35); }
+.quiz-input:focus { border-color: var(--cc, #cc3333); background: rgba(255,255,255,.07); }
+.quiz-input:disabled { opacity: .45; }
+.quiz-submit-btn {
+  flex-shrink: 0;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: none;
+  background: var(--cc, #cc3333);
+  color: #fff;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 12px; font-weight: 700; letter-spacing: .05em;
+  cursor: pointer;
+  transition: opacity .2s, transform .15s;
+}
+.quiz-submit-btn:hover { transform: translateY(-1px); }
+.quiz-submit-btn:disabled { opacity: .35; cursor: default; transform: none; }
+
+.quiz-suggestions {
+  position: absolute;
+  top: calc(100% + 6px); left: 0; right: 66px;
+  max-height: 168px; overflow-y: auto;
+  background: rgba(14,10,17,.97);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  z-index: 6;
+  display: none;
+  box-shadow: 0 10px 24px rgba(0,0,0,.4);
+}
+.quiz-suggestions.open { display: block; }
+.quiz-suggestion-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(230,220,220,.85);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.quiz-suggestion-item:last-child { border-bottom: none; }
+.quiz-suggestion-item:hover { background: rgba(255,255,255,.06); }
+
+.quiz-actions { display: flex; gap: 8px; }
+.quiz-actions .expand-btn { flex: 1; justify-content: center; }
+
+.quiz-wrong-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.quiz-wrong-chip {
+  font-size: 10px; letter-spacing: .04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(224,85,85,.1);
+  border: 1px solid rgba(224,85,85,.25);
+  color: rgba(230,150,150,.85);
+  text-decoration: line-through;
+}
+
+.quiz-result {
+  padding: 14px 16px;
+  border-radius: 12px;
+  animation: cardIn .4s var(--ease) both;
+}
+.quiz-result.win {
+  background: rgba(100,200,140,.09);
+  border: 1px solid rgba(100,200,140,.3);
+}
+.quiz-result.lose {
+  background: rgba(224,85,85,.09);
+  border: 1px solid rgba(224,85,85,.3);
+}
+.quiz-result-title {
+  font-family: 'Dela Gothic One', sans-serif;
+  font-size: 13px; color: #fff; margin-bottom: 4px;
+}
+.quiz-result-sub { font-size: 12px; color: rgba(210,200,200,.7); }
+.quiz-result-sub b { color: #fff; }
+
+.quiz-newsong-btn {
+  align-self: flex-start;
+  padding: 10px 18px;
+  border-radius: 9px;
+  border: none;
+  background: var(--cc, #cc3333);
+  color: #fff;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 12px; font-weight: 700; letter-spacing: .05em;
+  cursor: pointer;
+  transition: transform .15s, opacity .2s;
+}
+.quiz-newsong-btn:hover { transform: translateY(-1px); }
+
+.quiz-loading, .quiz-empty {
+  font-size: 12px;
+  color: rgba(200,160,160,.5);
+  text-align: center;
+  padding: 24px 0;
+  letter-spacing: .05em;
+}
+
+.quiz-settings-block { margin-bottom: 4px; }
+.quiz-settings-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: rgba(255,255,255,.55);
+  margin-bottom: 8px;
+}
+.quiz-settings-desc { font-size: 11px; color: rgba(200,160,160,.45); margin-top: 6px; line-height: 1.6; }
+
+.quiz-segmented {
+  display: flex;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+.quiz-segmented button {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: rgba(200,160,160,.55);
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.quiz-segmented button.active {
+  background: var(--cc, #cc3333);
+  color: #fff;
+}
+
+.quiz-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.quiz-toggle-copy { min-width: 0; }
+.quiz-toggle-title { font-size: 12px; font-weight: 700; color: #fff; }
+.quiz-toggle-desc { font-size: 10px; color: rgba(200,160,160,.45); margin-top: 2px; }
+.quiz-switch {
+  flex-shrink: 0;
+  width: 40px; height: 22px; border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.1);
+  position: relative;
+  cursor: pointer;
+  transition: background .2s;
+}
+.quiz-switch.on { background: var(--cc, #cc3333); }
+.quiz-switch::after {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  transition: transform .2s var(--ease);
+}
+.quiz-switch.on::after { transform: translateX(18px); }
+
+.quiz-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.quiz-stat-card {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.quiz-stat-value { font-family: 'Dela Gothic One', sans-serif; font-size: 18px; color: var(--cc, #cc3333); line-height: 1; margin-bottom: 3px; }
+.quiz-stat-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: rgba(200,160,160,.5); }
+
+.quiz-dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.quiz-dist-label { font-size: 10px; color: rgba(200,160,160,.5); width: 32px; flex-shrink: 0; }
+.quiz-dist-track { flex: 1; height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
+.quiz-dist-fill { height: 100%; border-radius: 999px; background: var(--cc, #cc3333); transition: width .6s var(--ease); }
+.quiz-dist-count { font-size: 10px; color: rgba(200,160,160,.4); width: 18px; text-align: right; flex-shrink: 0; }
+
+.quiz-history-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.05);
+}
+.quiz-history-result {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.quiz-history-result.win { background: rgba(100,200,140,.18); color: #7fd8a0; }
+.quiz-history-result.lose { background: rgba(224,85,85,.18); color: #e58a8a; }
+.quiz-history-info { flex: 1; min-width: 0; }
+.quiz-history-name { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quiz-history-meta { font-size: 10px; color: rgba(200,160,160,.4); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;
@@ -814,6 +1103,14 @@ a {
     <div id="page-content"></div>
   </div>
 </div>
+
+<button id="game-launcher" class="game-launcher" onclick="openGame()" aria-label="Play the music quiz" title="Music Quiz">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 18V5l12-2v13"/>
+    <circle cx="6" cy="18" r="3"/>
+    <circle cx="18" cy="16" r="3"/>
+  </svg>
+</button>
 
 <script>
 
@@ -1592,6 +1889,550 @@ window.addEventListener('resize', () => {
 });
 document.getElementById('stage-img').addEventListener('load', positionChars);
 setTimeout(positionChars, 50);
+</script>
+
+<script>
+/* =====================================================================
+   MUSIC QUIZ — "guess the song from a short clip" minigame
+   - Songs are read from music/manifest.json, a plain JSON array of the
+     mp3 filenames sitting in the music/ folder, each named
+     "JapaneseName(EnglishName).mp3". Run generate_manifest.py (included
+     alongside this file) any time you add/remove songs, then re-upload
+     music/manifest.json.
+   - Audio playback uses Howler.js in html5 mode, which plays through the
+     native <audio> element instead of fetching + decoding the whole file
+     into a buffer first. That means the browser streams just the bytes
+     it needs (most static hosts support HTTP range requests), so a
+     0.5s clip starts almost instantly instead of waiting on the full
+     song to download.
+   - Settings (language / hard mode) and past-game stats are both kept
+     in cookies, so they persist across visits on this browser.
+   ===================================================================== */
+
+// ---- reveal schedules -------------------------------------------------
+// Both modes use the same reveal schedule (the classic Heardle timings, 6 tries).
+// Normal mode always plays from the start of the song. Hard mode plays the exact
+// same-length clips, but from a random point in the song instead of the intro —
+// and disables the autocomplete dropdown, so you're guessing blind.
+const NORMAL_TIMES = [1, 2, 4, 7, 11, 16]; // seconds
+
+// ---- cookies ------------------------------------------------------------
+const STATS_COOKIE    = 'musicquiz_stats_v1';
+const SETTINGS_COOKIE = 'musicquiz_settings_v1';
+
+function setCookie(name, value, days) {
+  let expires = '';
+  if (days) {
+    const d = new Date();
+    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+    expires = '; expires=' + d.toUTCString();
+  }
+  document.cookie = name + '=' + value + expires + '; path=/; SameSite=Lax';
+}
+function getCookie(name) {
+  const m = document.cookie.match('(^|;\\s*)' + name + '=([^;]*)');
+  return m ? m[2] : null;
+}
+
+function defaultStats() {
+  return {
+    played: 0, won: 0, streak: 0, bestStreak: 0,
+    buckets: { normal: [0, 0, 0, 0, 0, 0], hard: [0, 0, 0, 0, 0, 0] },
+    history: []
+  };
+}
+// Both bucket arrays line up with NORMAL_TIMES (6 slots). If an old cookie has a
+// stale shape (e.g. from before hard mode's schedule matched normal mode), it's
+// discarded rather than misread.
+function normalizeBucket(arr) {
+  const out = [0, 0, 0, 0, 0, 0];
+  if (Array.isArray(arr) && arr.length === 6) {
+    for (let i = 0; i < 6; i++) out[i] = Number(arr[i]) || 0;
+  }
+  return out;
+}
+function loadStats() {
+  const raw = getCookie(STATS_COOKIE);
+  if (!raw) return defaultStats();
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw));
+    const base = defaultStats();
+    return Object.assign(base, parsed, {
+      buckets: {
+        normal: normalizeBucket(parsed.buckets && parsed.buckets.normal),
+        hard:   normalizeBucket(parsed.buckets && parsed.buckets.hard)
+      },
+      history: parsed.history || []
+    });
+  } catch (e) { return defaultStats(); }
+}
+function saveStats(stats) {
+  setCookie(STATS_COOKIE, encodeURIComponent(JSON.stringify(stats)), 365);
+}
+function recordResult(r, attemptIdx) {
+  const stats = loadStats();
+  stats.played++;
+  const modeKey = r.hard ? 'hard' : 'normal';
+  if (attemptIdx !== null) {
+    stats.won++;
+    stats.streak++;
+    stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
+    stats.buckets[modeKey][attemptIdx] = (stats.buckets[modeKey][attemptIdx] || 0) + 1;
+  } else {
+    stats.streak = 0;
+  }
+  stats.history.unshift({ en: r.song.en, jp: r.song.jp, a: attemptIdx, m: modeKey, l: r.lang, t: Date.now() });
+  stats.history = stats.history.slice(0, 25);
+  saveStats(stats);
+}
+function resetStats() {
+  if (!confirm('Clear all saved music quiz scores?')) return;
+  setCookie(STATS_COOKIE, '', -1);
+  renderScoresTab();
+}
+
+function loadSettings() {
+  const raw = getCookie(SETTINGS_COOKIE);
+  if (!raw) return { lang: 'en', hard: false };
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw));
+    return { lang: parsed.lang === 'jp' ? 'jp' : 'en', hard: !!parsed.hard };
+  } catch (e) { return { lang: 'en', hard: false }; }
+}
+function saveSettings() {
+  setCookie(SETTINGS_COOKIE, encodeURIComponent(JSON.stringify(settings)), 365);
+}
+
+let settings = loadSettings();
+let gameTab = 'Play';
+
+// ---- song library ---------------------------------------------------
+let SONGS = [];
+let songsLoading = false;
+
+function parseSongFile(filename) {
+  const name = String(filename);
+  // "JapaneseName(EnglishName).mp3"
+  const withJp = name.match(/^(.*)\(([^)]*)\)\.mp3$/i);
+  if (withJp) {
+    const jp = withJp[1].trim(), en = withJp[2].trim();
+    if (jp && en) return { jp, en, file: filename };
+  }
+  // "EnglishName.mp3" — no Japanese title, en-only entry
+  const enOnly = name.match(/^(.*)\.mp3$/i);
+  if (enOnly) {
+    const en = enOnly[1].trim();
+    if (en) return { jp: null, en, file: filename };
+  }
+  return null;
+}
+
+async function loadManifest() {
+  songsLoading = true;
+  if (current === 'game' && gameTab === 'Play') renderPlayTab();
+  try {
+    const res = await fetch('music/manifest.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('manifest not found');
+    const files = await res.json();
+    SONGS = files.map(parseSongFile).filter(Boolean);
+  } catch (e) {
+    console.warn('Music quiz: could not load music/manifest.json — see generate_manifest.py', e);
+    SONGS = [];
+  }
+  songsLoading = false;
+  if (current === 'game' && gameTab === 'Play') renderPlayTab();
+}
+
+// ---- round state + audio ---------------------------------------------
+let round = null;
+let currentHowl = null;
+let snippetTimer = null;
+
+function stopSnippet() {
+  clearTimeout(snippetTimer);
+  if (currentHowl) currentHowl.stop();
+  const disc = document.getElementById('quiz-disc');
+  if (disc) disc.classList.remove('spinning');
+}
+
+function startRound() {
+  if (!SONGS.length) return;
+  stopSnippet();
+  if (currentHowl) { currentHowl.unload(); currentHowl = null; }
+
+  // Songs with no Japanese title can't be used when guessing in Japanese.
+  const pool = SONGS.filter(s => s[settings.lang]);
+  if (!pool.length) {
+    round = { empty: true, lang: settings.lang };
+    renderPlayTab();
+    return;
+  }
+
+  const song = pool[Math.floor(Math.random() * pool.length)];
+  const hard = settings.hard;
+  round = {
+    song,
+    lang: settings.lang,
+    hard,
+    times: NORMAL_TIMES.slice(),
+    attempt: 0,
+    finished: false,
+    won: false,
+    wrongGuesses: [],
+    startOffset: 0,
+    ready: !hard // normal mode always starts at 0, so no need to wait on duration
+  };
+  currentHowl = new Howl({
+    src: [`music/${encodeURIComponent(song.file)}`],
+    html5: true,     // stream through the native <audio> element (range requests) — no full-file decode
+    preload: true,
+    volume: 0.8,
+    onload: () => {
+      if (!round || round.song !== song || !round.hard) return;
+      const dur = currentHowl.duration() || 0;
+      const maxSnippet = round.times[round.times.length - 1];
+      const latestStart = Math.max(0, dur - maxSnippet - 0.25);
+      round.startOffset = latestStart > 0 ? Math.random() * latestStart : 0;
+      round.ready = true;
+      renderPlayTab();
+    }
+  });
+  renderPlayTab();
+}
+
+function ensureRound() {
+  if (!round) startRound();
+}
+
+function playSnippet() {
+  if (!round || round.empty || round.finished || !currentHowl || !round.ready) return;
+  const dur = round.times[round.attempt];
+  clearTimeout(snippetTimer);
+  currentHowl.seek(round.startOffset || 0);
+  currentHowl.play();
+  const disc = document.getElementById('quiz-disc');
+  if (disc) disc.classList.add('spinning');
+  snippetTimer = setTimeout(() => {
+    currentHowl.pause();
+    if (disc) disc.classList.remove('spinning');
+  }, dur * 1000);
+}
+
+function normalize(str) {
+  return (str || '')
+    .toString()
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[!?.,'’‘"“”\-_:;~〜！？。、・「」『』（）()\[\]]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function advanceAttempt() {
+  round.attempt++;
+  if (round.attempt >= round.times.length) {
+    round.finished = true;
+    round.won = false;
+    stopSnippet();
+    recordResult(round, null);
+  }
+  renderPlayTab();
+}
+
+function submitGuess(value) {
+  if (!round || round.empty || round.finished) return;
+  const v = (value || '').trim();
+  if (!v) return;
+  const target = normalize(round.song[round.lang]);
+  const guessN = normalize(v);
+  const isCorrect = round.hard
+    ? guessN === target
+    : (guessN === target || (target.length > 3 && guessN.includes(target)) || (guessN.length > 3 && target.includes(guessN)));
+
+  const input = document.getElementById('quiz-input');
+  if (input) input.value = '';
+  const box = document.getElementById('quiz-suggestions');
+  if (box) { box.classList.remove('open'); box.innerHTML = ''; }
+
+  if (isCorrect) {
+    round.finished = true;
+    round.won = true;
+    stopSnippet();
+    recordResult(round, round.attempt);
+    renderPlayTab();
+    return;
+  }
+  round.wrongGuesses.push(v);
+  advanceAttempt();
+}
+
+function skipGuess() {
+  if (!round || round.empty || round.finished) return;
+  advanceAttempt();
+}
+
+function giveUp() {
+  if (!round || round.empty || round.finished) return;
+  round.finished = true;
+  round.won = false;
+  stopSnippet();
+  recordResult(round, null);
+  renderPlayTab();
+}
+
+function onGuessInput(value) {
+  const box = document.getElementById('quiz-suggestions');
+  if (!box || !round || round.empty) return;
+  if (round.hard || !value.trim()) { box.classList.remove('open'); box.innerHTML = ''; return; }
+  const lang = round.lang;
+  const q = normalize(value);
+  const seen = new Set();
+  const matches = [];
+  for (const s of SONGS) {
+    const name = s[lang];
+    if (!name || seen.has(name)) continue;
+    if (normalize(name).includes(q)) { matches.push(name); seen.add(name); }
+    if (matches.length >= 8) break;
+  }
+  if (!matches.length) { box.classList.remove('open'); box.innerHTML = ''; return; }
+  box.innerHTML = matches.map(name =>
+    `<div class="quiz-suggestion-item" onmousedown="selectSuggestion(${JSON.stringify(name)})">${escapeHtml(name)}</div>`
+  ).join('');
+  box.classList.add('open');
+}
+function selectSuggestion(name) {
+  // Clicking a suggestion completes the guess text in the input — it doesn't
+  // submit for you, so you can still double check before hitting Guess/Enter.
+  const input = document.getElementById('quiz-input');
+  if (input) { input.value = name; input.focus({ preventScroll: true }); }
+  const box = document.getElementById('quiz-suggestions');
+  if (box) { box.classList.remove('open'); box.innerHTML = ''; }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function quizPlayIcon() {
+  return `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="6,4 20,12 6,20"/></svg>`;
+}
+
+// ---- panel integration -------------------------------------------------
+function openGame() {
+  if (current === 'game') { closePanel(); return; }
+  current = 'game';
+  document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
+  document.getElementById('scene').classList.remove('chars-dimmed');
+
+  document.getElementById('char-name').textContent = 'Music Quiz';
+  const roleEl = document.getElementById('char-role');
+  roleEl.textContent = 'Guess the Song';
+  roleEl.style.color = '#e05555';
+  document.getElementById('panel').style.setProperty('--cc', '#e05555');
+
+  const tabs = ['Play', 'Settings', 'Scores'];
+  document.getElementById('tab-bar').innerHTML = tabs.map((t, i) =>
+    `<button class="tab-btn${i === 0 ? ' active' : ''}" onclick="switchGameTab('${t}',this)">${t}</button>`
+  ).join('') + '<div id="tab-indicator" class="tab-indicator"></div>';
+  positionIndicator(document.querySelector('#tab-bar .tab-btn.active'));
+
+  gameTab = 'Play';
+  renderGameTab();
+
+  document.getElementById('app').classList.add('open');
+  document.getElementById('hint').style.opacity = '0';
+
+  if (!SONGS.length && !songsLoading) loadManifest();
+}
+
+function switchGameTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  positionIndicator(btn);
+  gameTab = name;
+  renderGameTab();
+}
+
+function renderGameTab() {
+  if (gameTab === 'Play') renderPlayTab();
+  else if (gameTab === 'Settings') renderSettingsTab();
+  else if (gameTab === 'Scores') renderScoresTab();
+}
+
+function renderPlayTab() {
+  if (current !== 'game' || gameTab !== 'Play') return;
+  const pc = document.getElementById('page-content');
+  if (!pc) return;
+
+  if (songsLoading) {
+    pc.innerHTML = `<h3>Music Quiz</h3><div class="quiz-loading">Loading song library…</div>`;
+    refreshContentAnim(pc);
+    return;
+  }
+  if (!SONGS.length) {
+    pc.innerHTML = `
+      <h3>Music Quiz</h3>
+      <p class="quiz-empty">No songs found. Drop mp3s into the <strong>music/</strong> folder named
+      <em>JapaneseName(EnglishName).mp3</em>, run <strong>generate_manifest.py</strong> to build
+      <strong>music/manifest.json</strong>, then reload.</p>`;
+    refreshContentAnim(pc);
+    return;
+  }
+
+  ensureRound();
+  const r = round;
+
+  if (r.empty) {
+    const langLabel = r.lang === 'jp' ? 'Japanese' : 'English';
+    pc.innerHTML = `
+      <h3>Music Quiz</h3>
+      <p class="quiz-empty">None of your songs have a ${langLabel} title yet, so there's nothing to
+      guess in this language. Switch language in Settings, or rename files to include a
+      ${langLabel === 'Japanese' ? 'Japanese name, e.g. JapaneseName(EnglishName).mp3' : 'plain EnglishName.mp3'}.</p>`;
+    refreshContentAnim(pc);
+    return;
+  }
+
+  const langLabel = r.lang === 'jp' ? 'Japanese' : 'English';
+
+  const dotsHtml = r.times.map((t, i) => {
+    const cls = i < r.attempt ? 'used' : (i === r.attempt && !r.finished ? 'current' : '');
+    return `<div class="quiz-dot ${cls}">${t}s</div>`;
+  }).join('');
+
+  const wrongHtml = r.wrongGuesses.length
+    ? `<div class="quiz-wrong-list">${r.wrongGuesses.map(g => `<div class="quiz-wrong-chip">${escapeHtml(g)}</div>`).join('')}</div>`
+    : '';
+
+  let resultHtml = '';
+  if (r.finished) {
+    const target = r.song[r.lang];
+    const otherLang = r.lang === 'jp' ? r.song.en : r.song.jp;
+    resultHtml = `
+      <div class="quiz-result ${r.won ? 'win' : 'lose'}">
+        <div class="quiz-result-title">${r.won ? 'Correct!' : 'Out of attempts'}</div>
+        <div class="quiz-result-sub"><b>${escapeHtml(target)}</b>${otherLang ? ` <span style="opacity:.55">(${escapeHtml(otherLang)})</span>` : ''}${r.won ? ` — guessed at ${r.times[r.attempt]}s` : ''}</div>
+      </div>
+      <button class="quiz-newsong-btn" onclick="startRound()">Next Song</button>`;
+  }
+
+  pc.innerHTML = `
+    <h3>Music Quiz</h3>
+    <div class="quiz-intro">${r.hard ? 'Hard mode — random start point' : 'Normal mode'} · guessing in ${langLabel}</div>
+    <div class="quiz-wrap">
+      <div class="quiz-visual">
+        <button class="quiz-play-btn" id="quiz-play-btn" onclick="playSnippet()" ${r.finished || !r.ready ? 'disabled' : ''}>${quizPlayIcon()}</button>
+        <div class="quiz-disc" id="quiz-disc">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><circle cx="12" cy="12" r="2.4"/></svg>
+        </div>
+      </div>
+      ${!r.ready ? '<div class="quiz-loading" style="padding:0 0 4px;">Cueing a random start point…</div>' : ''}
+      <div class="quiz-progress">${dotsHtml}</div>
+      ${!r.finished ? `
+      <div class="quiz-guess-row">
+        <input type="text" class="quiz-input" id="quiz-input" autocomplete="off"
+          placeholder="Type the ${langLabel} title…"
+          oninput="onGuessInput(this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();submitGuess(document.getElementById('quiz-input').value);}">
+        <div class="quiz-suggestions" id="quiz-suggestions"></div>
+        <button class="quiz-submit-btn" onclick="submitGuess(document.getElementById('quiz-input').value)">Guess</button>
+      </div>
+      <div class="quiz-actions">
+        <button class="expand-btn" onclick="skipGuess()">Skip ▸</button>
+        <button class="expand-btn" onclick="giveUp()">Give up</button>
+      </div>` : ''}
+      ${wrongHtml}
+      ${resultHtml}
+    </div>
+  `;
+  refreshContentAnim(pc);
+  const input = document.getElementById('quiz-input');
+  if (input) input.focus({ preventScroll: true });
+}
+
+function renderSettingsTab() {
+  const pc = document.getElementById('page-content');
+  if (!pc) return;
+  pc.innerHTML = `
+    <h3>Settings</h3>
+    <p class="quiz-settings-desc" style="margin:-4px 0 14px;">Changes apply starting with your next song.</p>
+
+    <div class="quiz-settings-block">
+      <div class="quiz-settings-label">Language to guess in</div>
+      <div class="quiz-segmented">
+        <button class="${settings.lang === 'en' ? 'active' : ''}" onclick="setLang('en')">English</button>
+        <button class="${settings.lang === 'jp' ? 'active' : ''}" onclick="setLang('jp')">Japanese</button>
+      </div>
+    </div>
+
+    <div class="quiz-settings-block">
+      <div class="quiz-toggle-row">
+        <div class="quiz-toggle-copy">
+          <div class="quiz-toggle-title">Hard mode</div>
+          <div class="quiz-toggle-desc">Same clip lengths, but each one starts from a random point in the song instead of the intro — plus free-text guessing only, no autocomplete.</div>
+        </div>
+        <div class="quiz-switch ${settings.hard ? 'on' : ''}" onclick="setHard(${!settings.hard})"></div>
+      </div>
+    </div>
+  `;
+  refreshContentAnim(pc);
+}
+function setLang(l) { settings.lang = l; saveSettings(); renderSettingsTab(); }
+function setHard(v) { settings.hard = v; saveSettings(); renderSettingsTab(); }
+
+function renderScoresTab() {
+  const pc = document.getElementById('page-content');
+  if (!pc) return;
+  const stats = loadStats();
+  const winPct = stats.played ? Math.round((stats.won / stats.played) * 100) : 0;
+  const normalBuckets = stats.buckets.normal;
+  const hardBuckets = stats.buckets.hard;
+  const maxNormal = Math.max(1, ...normalBuckets);
+  const maxHard = Math.max(1, ...hardBuckets);
+
+  const distHtml = (buckets, times, max) => buckets.map((c, i) => `
+    <div class="quiz-dist-row">
+      <div class="quiz-dist-label">${times[i]}s</div>
+      <div class="quiz-dist-track"><div class="quiz-dist-fill" style="width:${(c / max) * 100}%"></div></div>
+      <div class="quiz-dist-count">${c}</div>
+    </div>`).join('');
+
+  const historyHtml = stats.history.length ? stats.history.map(h => `
+    <div class="quiz-history-item">
+      <div class="quiz-history-result ${h.a !== null ? 'win' : 'lose'}">${h.a !== null ? '✓' : '✕'}</div>
+      <div class="quiz-history-info">
+        <div class="quiz-history-name">${escapeHtml(h.l === 'jp' ? h.jp : h.en)}</div>
+        <div class="quiz-history-meta">${h.m === 'hard' ? 'Hard' : 'Normal'} · ${h.l === 'jp' ? 'JP' : 'EN'}${h.a !== null ? ' · solved at ' + NORMAL_TIMES[h.a] + 's' : ''}</div>
+      </div>
+    </div>`).join('') : '<p class="quiz-empty">No games played yet.</p>';
+
+  pc.innerHTML = `
+    <h3>Your Scores</h3>
+    <div class="quiz-stats-grid" style="margin-bottom:18px;">
+      <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.played}</div><div class="quiz-stat-label">Played</div></div>
+      <div class="quiz-stat-card"><div class="quiz-stat-value">${winPct}%</div><div class="quiz-stat-label">Win rate</div></div>
+      <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.streak}</div><div class="quiz-stat-label">Current streak</div></div>
+      <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.bestStreak}</div><div class="quiz-stat-label">Best streak</div></div>
+    </div>
+
+    <h4>Solved-at distribution · Normal</h4>
+    ${distHtml(normalBuckets, NORMAL_TIMES, maxNormal)}
+
+    <h4>Solved-at distribution · Hard</h4>
+    ${distHtml(hardBuckets, NORMAL_TIMES, maxHard)}
+
+    <h4>Recent games</h4>
+    <div style="display:flex;flex-direction:column;gap:6px;">${historyHtml}</div>
+
+    ${stats.played ? '<button class="expand-btn" style="margin-top:14px;" onclick="resetStats()">Reset scores</button>' : ''}
+  `;
+  refreshContentAnim(pc);
+}
+
+// stop any playing snippet whenever the panel closes or a character opens
+const _origClosePanel = closePanel;
+closePanel = function () { stopSnippet(); _origClosePanel(); };
+const _origOpenChar = openChar;
+openChar = function (id) { stopSnippet(); _origOpenChar(id); };
 </script>
 </body>
 </html>
