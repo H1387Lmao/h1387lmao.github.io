@@ -1,2438 +1,2844 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anoto To?</title>
-<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">
-<!-- Howler.js: streams audio via the native <audio> element (HTTP range requests) instead of
-     decoding the whole file up front, so short clips start playing almost instantly. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg: #08060a;
-  --accent-bocchi: #eeb8c4;
-  --accent-nijika: #e6d47b;
-  --accent-ryo:    #3a8cc8;
-  --accent-ikuyo:  #e05555;
-  --ease: cubic-bezier(.22,1,.36,1);
-  --ease-soft: cubic-bezier(.4,0,.2,1);
-}
-
-html, body {
-  width: 100%; height: 100%;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 18% 24%, rgba(238,184,196,.09), transparent 42%),
-    radial-gradient(circle at 82% 20%, rgba(58,140,200,.09), transparent 45%),
-    radial-gradient(circle at 55% 88%, rgba(230,212,123,.06), transparent 50%),
-    var(--bg);
-  background-size: 180% 180%;
-  animation: bgdrift 34s ease-in-out infinite alternate;
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-}
-@keyframes bgdrift {
-  0%   { background-position: 0% 10%, 100% 0%, 40% 100%; }
-  100% { background-position: 15% 30%, 75% 35%, 65% 75%; }
-}
-
-#app {
-  display: flex;
-  width: 200vw;
-  height: 100vh;
-  transition: transform 0.5s var(--ease);
-}
-#app.open { transform: translateX(-360px); }
-
-#stage-wrap {
-  position: relative;
-  width: 100vw;
-  flex-shrink: 0;
-  height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255,79,163,.05), transparent 40%),
-    radial-gradient(circle at 75% 75%, rgba(58,140,200,.05), transparent 45%),
-    #0b0910;
-  background-size: 160% 160%;
-  animation: bgdrift 26s ease-in-out infinite alternate;
-}
-#stage-img {
-  position: absolute;
-  inset: 0;
-  width: 100%; height: 100%;
-  object-fit: contain;
-  object-position: center;
-  pointer-events: none;
-  z-index: 1;
-  transform-origin: center;
-  animation: slowzoom 24s ease-in-out infinite;
-}
-@keyframes slowzoom { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.035); } }
-
-#stage-wrap::after {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  background: radial-gradient(ellipse at center,
-    transparent 35%, rgba(0,0,0,.3) 65%, rgba(0,0,0,.75) 100%);
-}
-#scene {
-  position: absolute; inset: 0;
-  z-index: 3;
-  transition: transform .5s var(--ease-soft);
-  will-change: transform;
-}
-
-.char {
-  position: absolute;
-  pointer-events: none;
-  user-select: none;
-  opacity: 0;
-  animation: charIn .8s var(--ease) both;
-}
-#char-ryo    { animation-delay: .05s; }
-#char-ikuyo  { animation-delay: .2s; }
-#char-nijika { animation-delay: .35s; }
-#char-bocchi { animation-delay: .5s; }
-@keyframes charIn {
-  from { opacity: 0; transform: translateY(26px) scale(.96); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.char img { display: block; animation: idlefloat 4.2s ease-in-out infinite; transition: filter .3s var(--ease-soft); }
-#char-ryo img    { animation-delay: 0s;   }
-#char-ikuyo img  { animation-delay: .5s;  }
-#char-nijika img { animation-delay: 1s;   }
-#char-bocchi img { animation-delay: 1.5s; }
-@keyframes idlefloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-
-#char-bocchi { --glow: var(--accent-bocchi); }
-#char-nijika { --glow: var(--accent-nijika); }
-#char-ryo    { --glow: var(--accent-ryo); }
-#char-ikuyo  { --glow: var(--accent-ikuyo); }
-
-.char:hover img { filter: drop-shadow(0 0 22px var(--glow)); }
-
-.chars-dimmed .char        { filter: brightness(0.2) saturate(0.2); }
-.chars-dimmed .char.active { filter: none; }
-
-.char.active::after {
-  content: '';
-  position: absolute; bottom: -4px; left: 50%;
-  transform: translateX(-50%);
-  width: 70%; height: 18px;
-  background: radial-gradient(ellipse, rgba(0,0,0,.7) 0%, transparent 72%);
-  border-radius: 50%; filter: blur(3px);
-}
-.char.active img { animation: charfloat 2.8s ease-in-out infinite; }
-@keyframes charfloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-
-.hitbox {
-  position: absolute;
-  width: 70%; height: 100%;
-  bottom: 0; left: 50%;
-  transform: translateX(-50%);
-  pointer-events: auto;
-  cursor: pointer;
-  z-index: 10;
-}
-
-#hint {
-  position: absolute;
-  bottom: 6%; left: 50%;
-  transform: translateX(-50%);
-  display: flex; align-items: center; gap: 8px;
-  font-size: 11px; letter-spacing: .3em; text-transform: uppercase;
-  color: rgba(255,220,220,.45);
-  pointer-events: none; white-space: nowrap;
-  transition: opacity .4s;
-  animation: hpulse 3s ease-in-out infinite;
-  opacity: 0;
-  animation: hintIn .8s var(--ease) .9s both, hpulse 3s ease-in-out 1.7s infinite;
-}
-#hint .hint-chevron { animation: chevbounce 1.6s ease-in-out infinite; }
-@keyframes hintIn { from{opacity:0; transform:translate(-50%,6px);} to{opacity:1; transform:translate(-50%,0);} }
-@keyframes hpulse { 0%,100%{opacity:.45} 50%{opacity:.85} }
-@keyframes chevbounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
-
-#panel {
-  position: relative;
-  width: 360px;
-  flex-shrink: 0;
-  height: 100vh;
-  overflow: hidden;
-  background: rgba(9,6,13,0.9);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  border-left: 1px solid rgba(160,60,60,.3);
-}
-
-#panel::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 5;
-  background: linear-gradient(90deg, transparent, #eeb8c4, #e6d47b, #3a4664, transparent);
-  background-size: 200% 100%;
-  animation: sheen 6s linear infinite;
-}
-@keyframes sheen { 0%{background-position:0% 0} 100%{background-position:200% 0} }
-
-#panel::after {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(ellipse 60% 40% at 100% 0%, color-mix(in srgb, var(--cc, #cc3333) 14%, transparent), transparent 70%);
-  opacity: .8;
-}
-
-#panel-header {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 120px;
-  padding: 32px 24px 0;
-  z-index: 2;
-}
-#panel-close {
-  position: absolute; top: 14px; right: 14px;
-  width: 28px; height: 28px;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 50%;
-  color: rgba(255,255,255,.5);
-  font-size: 14px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .2s, color .2s, transform .2s;
-}
-#panel-close:hover { background: rgba(200,40,40,.35); color: #fff; transform: rotate(90deg); }
-
-#char-name {
-  font-family: 'Dela Gothic One', sans-serif;
-  font-size: 22px; color: #fff;
-  letter-spacing: .05em; margin-bottom: 3px;
-  opacity: 0;
-  animation: fadeUp .5s var(--ease) .1s forwards;
-}
-#char-role {
-  font-size: 10px; letter-spacing: .25em; text-transform: uppercase;
-  opacity: 0;
-  animation: fadeUp .5s var(--ease) .2s forwards;
-}
-@keyframes fadeUp { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
-
-#tab-bar {
-  position: absolute;
-  top: 120px; left: 0; right: 0;
-  height: 42px;
-  display: flex;
-  align-items: flex-end;
-  border-bottom: 1px solid rgba(160,60,60,.25);
-  padding: 0 16px;
-  gap: 4px;
-  z-index: 2;
-  background: transparent;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-#tab-bar::-webkit-scrollbar { display: none; }
-
-.tab-btn {
-  position: relative;
-  background: none; border: none;
-  margin-bottom: -1px;
-  padding: 8px 12px;
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 11px; letter-spacing: .15em; text-transform: uppercase;
-  color: rgba(200,160,160,.45);
-  cursor: pointer;
-  transition: color .2s;
-  white-space: nowrap;
-}
-.tab-btn:hover  { color: rgba(200,160,160,.8); }
-.tab-btn.active { color: #fff; }
-.tab-btn:focus-visible, #panel-close:focus-visible, .expand-btn:focus-visible {
-  outline: 2px solid rgba(255,255,255,.6);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-.tab-indicator {
-  position: absolute;
-  bottom: -1px; left: 0;
-  height: 2px; width: 0;
-  border-radius: 2px;
-  background: var(--cc, #cc3333);
-  box-shadow: 0 0 10px var(--cc, #cc3333);
-  transition: transform .4s var(--ease), width .4s var(--ease);
-}
-
-.kessoku-stat {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(255, 79, 163, 0.06);
-  border: 1px solid rgba(255, 79, 163, 0.2);
-  border-radius: 12px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
-}
-.kessoku-stat-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-.kessoku-stat-info { flex: 1; min-width: 0; }
-.kessoku-stat-value {
-  font-family: 'Dela Gothic One', sans-serif;
-  font-size: 18px;
-  color: #ff4fa3;
-  line-height: 1;
-  margin-bottom: 2px;
-}
-.kessoku-stat-label {
-  font-size: 10px;
-  letter-spacing: .15em;
-  text-transform: uppercase;
-  color: rgba(200,160,160,.5);
-}
-.kessoku-stat-sub {
-  font-size: 10px;
-  color: rgba(200,160,160,.35);
-  white-space: nowrap;
-}
-
-#page-content {
-  position: absolute;
-  top: 162px;
-  left: 0; right: 0; bottom: 0;
-  overflow-y: auto;
-  padding: 22px 24px 32px;
-  color: #e8d8d8;
-  font-size: 14px;
-  line-height: 1.85;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(160,50,50,.35) transparent;
-  z-index: 1;
-}
-#page-content::-webkit-scrollbar { width: 3px; }
-#page-content::-webkit-scrollbar-thumb { background: rgba(160,50,50,.4); border-radius: 2px; }
-
-#page-content.content-anim { animation: contentIn .45s var(--ease) both; }
-@keyframes contentIn { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
-
-#page-content h3 {
-  font-family: 'Dela Gothic One', sans-serif;
-  font-size: 14px; color: #fff; letter-spacing: .06em;
-  margin: 20px 0 8px;
-}
-#page-content h3:first-child { margin-top: 0; }
-#page-content h4 {
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 12px; font-weight: 700;
-  color: rgba(255,255,255,.6);
-  letter-spacing: .1em; text-transform: uppercase;
-  margin: 14px 0 6px;
-}
-#page-content p  { margin-bottom: 10px; color: #d8c8c8; }
-#page-content ul { padding-left: 18px; margin-bottom: 10px; }
-#page-content li { margin-bottom: 4px; color: #d8c8c8; }
-#page-content em { color: #e8aaaa; font-style: italic; }
-#page-content strong { color: #fff; }
-
-.tag {
-  display: inline-block;
-  padding: 2px 9px; margin: 2px 3px 2px 0;
-  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-  border-radius: 3px;
-  border: 1px solid rgba(160,60,60,.4);
-  background: rgba(160,40,40,.15);
-  color: rgba(210,140,140,.9);
-  transition: transform .2s var(--ease-soft);
-}
-.tag:hover { transform: translateY(-1px); }
-
-.stat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.stat-label {
-  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-  color: rgba(200,160,160,.55); width: 85px; flex-shrink: 0;
-}
-.stat-bar-wrap {
-  flex: 1; height: 4px;
-  background: rgba(255,255,255,.08);
-  border-radius: 2px; overflow: hidden;
-}
-.stat-bar {
-  height: 100%; border-radius: 2px;
-  background: #e05555;
-  transition: width .8s var(--ease);
-}
-
-.anime-library {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.anime-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.03);
-  transition: border-color .25s, background .25s, transform .25s var(--ease-soft);
-  opacity: 0;
-  animation: cardIn .5s var(--ease) both;
-}
-@keyframes cardIn { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
-.anime-card:hover {
-  border-color: rgba(255,255,255,0.11);
-  background: rgba(255,255,255,0.05);
-  transform: translateY(-2px);
-}
-
-.anime-card-glow {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity .3s;
-  pointer-events: none;
-  border-radius: 16px;
-}
-.anime-card:hover .anime-card-glow { opacity: 1; }
-
-.anime-card-inner {
-  position: relative;
-  display: flex;
-  gap: 14px;
-  padding: 14px;
-}
-
-.anime-cover-wrap {
-  position: relative; flex-shrink: 0;
-  display: flex;
-  align-items: center;
-}
-.anime-cover {
-  width: 74px;
-  height: 74px;
-  object-fit: cover;
-  border-radius: 10px;
-  display: block;
-}
-
-.anime-info { flex: 1; min-width: 0; }
-
-.anime-title {
-  font-family: 'Dela Gothic One', sans-serif;
-  font-size: 13px;
-  color: #fff;
-  letter-spacing: .02em;
-  margin-bottom: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.anime-badges {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-.anime-badge {
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.07);
-  color: rgba(220,200,200,.8);
-}
-
-.anime-progress-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 5px;
-}
-.anime-progress-label {
-  font-size: 10px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: rgba(200,160,160,.5);
-}
-.anime-progress-track {
-  width: 100%;
-  height: 5px;
-  background: rgba(255,255,255,.07);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.anime-progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  transition: width .8s var(--ease);
-}
-
-.anime-meta {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.anime-meta-pill {
-  background: rgba(255,255,255,0.04);
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 11px;
-  color: #c8b8b8;
-}
-.anime-timestamp {
-  font-size: 11px;
-  color: rgba(200,160,160,.45);
-}
-
-.anime-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.anime-title-row .anime-title {
-  margin-bottom: 0;
-  flex: 1;
-  min-width: 0;
-}
-.anime-rating {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  padding: 3px 7px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.07);
-}
-
-.anime-footer-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  flex-direction: column;
-}
-
-.song-player {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 8px;
-  padding: 5px 9px 5px 6px;
-  flex: 1;
-  min-width: 0;
-  max-width: 175px;
-}
-.song-play-btn {
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  background: var(--song-accent, #cc3333);
-  border: none;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff;
-  flex-shrink: 0;
-  transition: transform .15s, opacity .15s;
-}
-.song-play-btn:hover { transform: scale(1.1); opacity: .85; }
-.song-info { min-width: 0; }
-.song-title {
-  font-size: 11px; font-weight: 700;
-  color: rgba(255,255,255,.8);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.song-artist {
-  font-size: 10px;
-  color: rgba(200,160,160,.5);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-a {
-  text-decoration: none;
-}
-
-.expand-btn {
-  display: flex; align-items: center; gap: 4px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 8px;
-  padding: 5px 10px;
-  color: var(--exp-color, rgba(200,160,160,.7));
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 11px; letter-spacing: .06em;
-  cursor: pointer;
-  transition: background .2s, border-color .2s;
-  white-space: nowrap;
-  flex-shrink: 0;
-  text-decoration: none;
-}
-.expand-btn:hover { background: rgba(255,255,255,0.09); }
-.expand-chevron {
-  transition: transform .25s var(--ease);
-}
-.expand-chevron.rotated { transform: rotate(180deg); }
-
-.seasons-panel {
-  padding: 0 14px 14px;
-  animation: contentIn .35s var(--ease) both;
-}
-.seasons-divider {
-  height: 1px;
-  margin-bottom: 12px;
-  border-radius: 1px;
-}
-.seasons-list { display: flex; flex-direction: column; gap: 10px; }
-.season-row {}
-.season-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.season-title {
-  font-size: 11px; font-weight: 700;
-  color: rgba(255,255,255,.7);
-  flex: 1; min-width: 0;
-}
-.season-note {
-  font-size: 10px;
-  color: rgba(200,160,160,.4);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.season-progress-wrap {
-  display: flex; align-items: center; gap: 8px;
-}
-.season-progress-track {
-  flex: 1; height: 3px;
-  background: rgba(255,255,255,.06);
-  border-radius: 999px; overflow: hidden;
-}
-.season-progress-fill {
-  height: 100%; border-radius: 999px;
-  transition: width .8s var(--ease);
-}
-.season-ep-count {
-  font-size: 10px;
-  color: rgba(200,160,160,.4);
-  white-space: nowrap;
-  flex-shrink: 0;
-  min-width: 36px;
-  text-align: right;
-}
-.seasons-count {
-  border-width: 1px;
-  border-style: solid;
-}
-.anime-card.expanded {
-  border-color: rgba(255,255,255,0.1);
-}
-
-.lastfm-widget {
-  background: rgba(210, 40, 40, 0.06);
-  border: 1px solid rgba(210, 40, 40, 0.22);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 18px;
-}
-.lastfm-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 10px;
-}
-.lastfm-logo {
-  width: 16px; height: 16px;
-  flex-shrink: 0;
-}
-.lastfm-label {
-  font-size: 10px;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-  color: rgba(210,100,100,.7);
-  flex: 1;
-}
-.lastfm-username {
-  font-size: 10px;
-  color: rgba(200,160,160,.4);
-  letter-spacing: .05em;
-}
-.lastfm-tracks {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-.lastfm-track {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 9px;
-  border-radius: 9px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.05);
-  transition: background .2s;
-  text-decoration: none;
-}
-.lastfm-track:hover { background: rgba(255,255,255,0.06); }
-.lastfm-track-art {
-  width: 36px; height: 36px;
-  border-radius: 6px;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: rgba(255,255,255,0.06);
-}
-.lastfm-track-art-placeholder {
-  width: 36px; height: 36px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  background: rgba(255,255,255,0.06);
-  display: flex; align-items: center; justify-content: center;
-  color: rgba(255,255,255,.2);
-  font-size: 16px;
-}
-.lastfm-track-info { flex: 1; min-width: 0; }
-.lastfm-track-name {
-  font-size: 12px; font-weight: 700;
-  color: rgba(255,255,255,.88);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 2px;
-}
-.lastfm-track-artist {
-  font-size: 10px;
-  color: rgba(200,160,160,.5);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.lastfm-track-time {
-  font-size: 10px;
-  color: rgba(200,160,160,.35);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-.lastfm-now-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #e05555;
-  flex-shrink: 0;
-  animation: lfpulse 1.4s ease-in-out infinite;
-}
-@keyframes lfpulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
-.lastfm-error {
-  font-size: 11px;
-  color: rgba(200,100,100,.6);
-  text-align: center;
-  padding: 8px 0;
-}
-.lastfm-loading {
-  font-size: 11px;
-  color: rgba(200,160,160,.4);
-  letter-spacing: .08em;
-  text-align: center;
-  padding: 8px 0;
-  animation: hpulse 1.5s ease-in-out infinite;
-}
-.lastfm-config-note {
-  font-size: 10px;
-  color: rgba(200,140,100,.55);
-  text-align: center;
-  padding: 6px 0;
-  letter-spacing: .05em;
-}
-
-@media (max-width: 720px) {
-  #app { width: 100vw; }
-  #app.open { transform: none; }
-  #stage-wrap { width: 100vw; }
-  #panel {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-    border-left: none;
-    transform: translateY(100%);
-    transition: transform .45s var(--ease);
-    z-index: 50;
-  }
-  #app.open #panel { transform: translateY(0); }
-}
-
-/* ===================== Music Quiz ===================== */
-.game-launcher {
-  position: fixed;
-  top: 22px; left: 22px;
-  z-index: 40;
-  width: 46px; height: 46px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(9,6,13,0.75);
-  border: 1px solid rgba(224,85,85,.35);
-  color: rgba(255,225,225,.85);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  cursor: pointer;
-  transition: transform .25s var(--ease-soft), border-color .25s, background .25s, box-shadow .25s;
-  animation: charIn .8s var(--ease) .7s both;
-}
-.game-launcher:hover {
-  transform: translateY(-2px) scale(1.05);
-  border-color: rgba(224,85,85,.7);
-  box-shadow: 0 0 18px rgba(224,85,85,.35);
-}
-.game-launcher svg { width: 20px; height: 20px; }
-
-.quiz-wrap { display: flex; flex-direction: column; gap: 16px; }
-
-.quiz-intro { font-size: 12px; color: rgba(200,160,160,.6); margin-bottom: 2px; }
-
-.quiz-visual {
-  display: flex; align-items: center; justify-content: center;
-  gap: 18px;
-  padding: 22px 10px;
-}
-.quiz-disc {
-  width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
-  background: radial-gradient(circle at 50% 50%, #1c1420 0%, #0c0810 60%, #0c0810 100%);
-  border: 1px solid rgba(255,255,255,.08);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--cc, #cc3333);
-  position: relative;
-}
-.quiz-disc::before {
-  content: '';
-  position: absolute; inset: 8px;
-  border-radius: 50%;
-  border: 1px dashed rgba(255,255,255,.08);
-}
-.quiz-disc.spinning { animation: quizspin 2.6s linear infinite; }
-@keyframes quizspin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
-.quiz-play-btn {
-  width: 54px; height: 54px; border-radius: 50%;
-  background: var(--cc, #cc3333);
-  border: none; color: #fff; cursor: pointer; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .15s, opacity .15s;
-  box-shadow: 0 0 0 rgba(0,0,0,0);
-}
-.quiz-play-btn:hover { transform: scale(1.08); }
-.quiz-play-btn:disabled { opacity: .35; cursor: default; transform: none; }
-.quiz-play-btn svg { width: 20px; height: 20px; }
-
-.quiz-progress { display: flex; gap: 6px; }
-.quiz-dot {
-  flex: 1;
-  text-align: center;
-  padding: 6px 2px;
-  border-radius: 8px;
-  font-size: 10px; letter-spacing: .04em;
-  color: rgba(200,160,160,.4);
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.06);
-  transition: background .25s, border-color .25s, color .25s;
-}
-.quiz-dot.used { background: rgba(255,255,255,.03); color: rgba(200,160,160,.3); border-color: rgba(255,255,255,.05); }
-.quiz-dot.current {
-  background: color-mix(in srgb, var(--cc, #cc3333) 18%, transparent);
-  border-color: color-mix(in srgb, var(--cc, #cc3333) 55%, transparent);
-  color: #fff;
-  font-weight: 700;
-}
-
-.quiz-guess-row { position: relative; display: flex; gap: 8px; }
-.quiz-input {
-  flex: 1; min-width: 0;
-  background: rgba(255,255,255,.05);
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 9px;
-  padding: 10px 12px;
-  color: #fff;
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 13px;
-  outline: none;
-  transition: border-color .2s, background .2s;
-}
-.quiz-input::placeholder { color: rgba(200,160,160,.35); }
-.quiz-input:focus { border-color: var(--cc, #cc3333); background: rgba(255,255,255,.07); }
-.quiz-input:disabled { opacity: .45; }
-.quiz-submit-btn {
-  flex-shrink: 0;
-  padding: 0 16px;
-  border-radius: 9px;
-  border: none;
-  background: var(--cc, #cc3333);
-  color: #fff;
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 12px; font-weight: 700; letter-spacing: .05em;
-  cursor: pointer;
-  transition: opacity .2s, transform .15s;
-}
-.quiz-submit-btn:hover { transform: translateY(-1px); }
-.quiz-submit-btn:disabled { opacity: .35; cursor: default; transform: none; }
-
-.quiz-suggestions {
-  position: absolute;
-  top: calc(100% + 6px); left: 0; right: 66px;
-  max-height: 168px; overflow-y: auto;
-  background: rgba(14,10,17,.97);
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 10px;
-  z-index: 6;
-  display: none;
-  box-shadow: 0 10px 24px rgba(0,0,0,.4);
-}
-.quiz-suggestions.open { display: block; }
-.quiz-suggestion-item {
-  padding: 8px 12px;
-  font-size: 12px;
-  color: rgba(230,220,220,.85);
-  cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,.04);
-}
-.quiz-suggestion-item:last-child { border-bottom: none; }
-.quiz-suggestion-item:hover { background: rgba(255,255,255,.06); }
-
-.quiz-actions { display: flex; gap: 8px; }
-.quiz-actions .expand-btn { flex: 1; justify-content: center; }
-
-.quiz-wrong-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.quiz-wrong-chip {
-  font-size: 10px; letter-spacing: .04em;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(224,85,85,.1);
-  border: 1px solid rgba(224,85,85,.25);
-  color: rgba(230,150,150,.85);
-  text-decoration: line-through;
-}
-
-.quiz-result {
-  padding: 14px 16px;
-  border-radius: 12px;
-  animation: cardIn .4s var(--ease) both;
-}
-.quiz-result.win {
-  background: rgba(100,200,140,.09);
-  border: 1px solid rgba(100,200,140,.3);
-}
-.quiz-result.lose {
-  background: rgba(224,85,85,.09);
-  border: 1px solid rgba(224,85,85,.3);
-}
-.quiz-result-title {
-  font-family: 'Dela Gothic One', sans-serif;
-  font-size: 13px; color: #fff; margin-bottom: 4px;
-}
-.quiz-result-sub { font-size: 12px; color: rgba(210,200,200,.7); }
-.quiz-result-sub b { color: #fff; }
-
-.quiz-newsong-btn {
-  align-self: flex-start;
-  padding: 10px 18px;
-  border-radius: 9px;
-  border: none;
-  background: var(--cc, #cc3333);
-  color: #fff;
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 12px; font-weight: 700; letter-spacing: .05em;
-  cursor: pointer;
-  transition: transform .15s, opacity .2s;
-}
-.quiz-newsong-btn:hover { transform: translateY(-1px); }
-
-.quiz-loading, .quiz-empty {
-  font-size: 12px;
-  color: rgba(200,160,160,.5);
-  text-align: center;
-  padding: 24px 0;
-  letter-spacing: .05em;
-}
-
-.quiz-settings-block { margin-bottom: 4px; }
-.quiz-settings-label {
-  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  color: rgba(255,255,255,.55);
-  margin-bottom: 8px;
-}
-.quiz-settings-desc { font-size: 11px; color: rgba(200,160,160,.45); margin-top: 6px; line-height: 1.6; }
-
-.quiz-segmented {
-  display: flex;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 3px;
-}
-.quiz-segmented button {
-  flex: 1;
-  padding: 8px 4px;
-  border-radius: 7px;
-  border: none;
-  background: transparent;
-  color: rgba(200,160,160,.55);
-  font-family: 'M PLUS Rounded 1c', sans-serif;
-  font-size: 12px; font-weight: 700; letter-spacing: .04em;
-  cursor: pointer;
-  transition: background .2s, color .2s;
-}
-.quiz-segmented button.active {
-  background: var(--cc, #cc3333);
-  color: #fff;
-}
-
-.quiz-toggle-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.06);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-.quiz-toggle-copy { min-width: 0; }
-.quiz-toggle-title { font-size: 12px; font-weight: 700; color: #fff; }
-.quiz-toggle-desc { font-size: 10px; color: rgba(200,160,160,.45); margin-top: 2px; }
-.quiz-switch {
-  flex-shrink: 0;
-  width: 40px; height: 22px; border-radius: 999px;
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.1);
-  position: relative;
-  cursor: pointer;
-  transition: background .2s;
-}
-.quiz-switch.on { background: var(--cc, #cc3333); }
-.quiz-switch::after {
-  content: '';
-  position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px; border-radius: 50%;
-  background: #fff;
-  transition: transform .2s var(--ease);
-}
-.quiz-switch.on::after { transform: translateX(18px); }
-
-.quiz-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.quiz-stat-card {
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.06);
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-.quiz-stat-value { font-family: 'Dela Gothic One', sans-serif; font-size: 18px; color: var(--cc, #cc3333); line-height: 1; margin-bottom: 3px; }
-.quiz-stat-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: rgba(200,160,160,.5); }
-
-.quiz-dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-.quiz-dist-label { font-size: 10px; color: rgba(200,160,160,.5); width: 32px; flex-shrink: 0; }
-.quiz-dist-track { flex: 1; height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
-.quiz-dist-fill { height: 100%; border-radius: 999px; background: var(--cc, #cc3333); transition: width .6s var(--ease); }
-.quiz-dist-count { font-size: 10px; color: rgba(200,160,160,.4); width: 18px; text-align: right; flex-shrink: 0; }
-
-.quiz-history-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.05);
-}
-.quiz-history-result {
-  width: 22px; height: 22px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; flex-shrink: 0;
-}
-.quiz-history-result.win { background: rgba(100,200,140,.18); color: #7fd8a0; }
-.quiz-history-result.lose { background: rgba(224,85,85,.18); color: #e58a8a; }
-.quiz-history-info { flex: 1; min-width: 0; }
-.quiz-history-name { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.quiz-history-meta { font-size: 10px; color: rgba(200,160,160,.4); }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .001ms !important;
-  }
-}
-</style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Anoto To?</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js">
+    </script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #08060a;
+            --accent-bocchi: #eeb8c4;
+            --accent-nijika: #e6d47b;
+            --accent-ryo: #3a8cc8;
+            --accent-ikuyo: #e05555;
+            --ease: cubic-bezier(.22, 1, .36, 1);
+            --ease-soft: cubic-bezier(.4, 0, .2, 1);
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 18% 24%, rgba(238, 184, 196, .09), transparent 42%),
+                radial-gradient(circle at 82% 20%, rgba(58, 140, 200, .09), transparent 45%),
+                radial-gradient(circle at 55% 88%, rgba(230, 212, 123, .06), transparent 50%),
+                var(--bg);
+            background-size: 180% 180%;
+            animation: bgdrift 34s ease-in-out infinite alternate;
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+        }
+
+        @keyframes bgdrift {
+            0% {
+                background-position: 0% 10%, 100% 0%, 40% 100%;
+            }
+            100% {
+                background-position: 15% 30%, 75% 35%, 65% 75%;
+            }
+        }
+
+        #app {
+            display: flex;
+            width: 200vw;
+            height: 100vh;
+            transition: transform 0.5s var(--ease);
+        }
+        #app.open {
+            transform: translateX(-360px);
+        }
+
+        #stage-wrap {
+            position: relative;
+            width: 100vw;
+            flex-shrink: 0;
+            height: 100vh;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 30% 20%, rgba(255, 79, 163, .05), transparent 40%),
+                radial-gradient(circle at 75% 75%, rgba(58, 140, 200, .05), transparent 45%),
+                #0b0910;
+            background-size: 160% 160%;
+            animation: bgdrift 26s ease-in-out infinite alternate;
+        }
+
+        #stage-img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center;
+            pointer-events: none;
+            z-index: 1;
+            transform-origin: center;
+            animation: slowzoom 24s ease-in-out infinite;
+        }
+
+        @keyframes slowzoom {
+            0%,
+            100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.035);
+            }
+        }
+
+        #stage-wrap::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            background: radial-gradient(ellipse at center,
+                    transparent 35%, rgba(0, 0, 0, .3) 65%, rgba(0, 0, 0, .75) 100%);
+        }
+
+        #scene {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            transition: transform .5s var(--ease-soft);
+            will-change: transform;
+        }
+
+        .char {
+            position: absolute;
+            pointer-events: none;
+            user-select: none;
+            opacity: 0;
+            animation: charIn .8s var(--ease) both;
+        }
+        #char-ryo {
+            animation-delay: .05s;
+        }
+        #char-ikuyo {
+            animation-delay: .2s;
+        }
+        #char-nijika {
+            animation-delay: .35s;
+        }
+        #char-bocchi {
+            animation-delay: .5s;
+        }
+
+        @keyframes charIn {
+            from {
+                opacity: 0;
+                transform: translateY(26px) scale(.96);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .char img {
+            display: block;
+            animation: idlefloat 4.2s ease-in-out infinite;
+            transition: filter .3s var(--ease-soft);
+        }
+        #char-ryo img {
+            animation-delay: 0s;
+        }
+        #char-ikuyo img {
+            animation-delay: .5s;
+        }
+        #char-nijika img {
+            animation-delay: 1s;
+        }
+        #char-bocchi img {
+            animation-delay: 1.5s;
+        }
+
+        @keyframes idlefloat {
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-4px);
+            }
+        }
+
+        #char-bocchi {
+            --glow: var(--accent-bocchi);
+        }
+        #char-nijika {
+            --glow: var(--accent-nijika);
+        }
+        #char-ryo {
+            --glow: var(--accent-ryo);
+        }
+        #char-ikuyo {
+            --glow: var(--accent-ikuyo);
+        }
+
+        .char:hover img {
+            filter: drop-shadow(0 0 22px var(--glow));
+        }
+
+        .chars-dimmed .char {
+            filter: brightness(0.2) saturate(0.2);
+        }
+        .chars-dimmed .char.active {
+            filter: none;
+        }
+
+        .char.active::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
+            height: 18px;
+            background: radial-gradient(ellipse, rgba(0, 0, 0, .7) 0%, transparent 72%);
+            border-radius: 50%;
+            filter: blur(3px);
+        }
+        .char.active img {
+            animation: charfloat 2.8s ease-in-out infinite;
+        }
+
+        @keyframes charfloat {
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-5px);
+            }
+        }
+
+        .hitbox {
+            position: absolute;
+            width: 70%;
+            height: 100%;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        #hint {
+            position: absolute;
+            bottom: 6%;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            letter-spacing: .3em;
+            text-transform: uppercase;
+            color: rgba(255, 220, 220, .45);
+            pointer-events: none;
+            white-space: nowrap;
+            transition: opacity .4s;
+            animation: hpulse 3s ease-in-out infinite;
+            opacity: 0;
+            animation: hintIn .8s var(--ease) .9s both, hpulse 3s ease-in-out 1.7s infinite;
+        }
+
+        #hint .hint-chevron {
+            animation: chevbounce 1.6s ease-in-out infinite;
+        }
+
+        @keyframes hintIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, 6px);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+        }
+        @keyframes hpulse {
+            0%,
+            100% {
+                opacity: .45;
+            }
+            50% {
+                opacity: .85;
+            }
+        }
+        @keyframes chevbounce {
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(3px);
+            }
+        }
+
+        #panel {
+            position: relative;
+            width: 360px;
+            flex-shrink: 0;
+            height: 100vh;
+            overflow: hidden;
+            background: rgba(9, 6, 13, 0.9);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border-left: 1px solid rgba(160, 60, 60, .3);
+        }
+
+        #panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            z-index: 5;
+            background: linear-gradient(90deg, transparent, #eeb8c4, #e6d47b, #3a4664, transparent);
+            background-size: 200% 100%;
+            animation: sheen 6s linear infinite;
+        }
+
+        @keyframes sheen {
+            0% {
+                background-position: 0% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
+        }
+
+        #panel::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background: radial-gradient(ellipse 60% 40% at 100% 0%, color-mix(in srgb, var(--cc, #cc3333) 14%, transparent), transparent 70%);
+            opacity: .8;
+        }
+
+        #panel-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 120px;
+            padding: 32px 24px 0;
+            z-index: 2;
+        }
+
+        #panel-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 28px;
+            height: 28px;
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 50%;
+            color: rgba(255, 255, 255, .5);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .2s, color .2s, transform .2s;
+        }
+        #panel-close:hover {
+            background: rgba(200, 40, 40, .35);
+            color: #fff;
+            transform: rotate(90deg);
+        }
+
+        #char-name {
+            font-family: 'Dela Gothic One', sans-serif;
+            font-size: 22px;
+            color: #fff;
+            letter-spacing: .05em;
+            margin-bottom: 3px;
+            opacity: 0;
+            animation: fadeUp .5s var(--ease) .1s forwards;
+        }
+
+        #char-role {
+            font-size: 10px;
+            letter-spacing: .25em;
+            text-transform: uppercase;
+            opacity: 0;
+            animation: fadeUp .5s var(--ease) .2s forwards;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #tab-bar {
+            position: absolute;
+            top: 120px;
+            left: 0;
+            right: 0;
+            height: 42px;
+            display: flex;
+            align-items: flex-end;
+            border-bottom: 1px solid rgba(160, 60, 60, .25);
+            padding: 0 16px;
+            gap: 4px;
+            z-index: 2;
+            background: transparent;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        #tab-bar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            position: relative;
+            background: none;
+            border: none;
+            margin-bottom: -1px;
+            padding: 8px 12px;
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 11px;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            color: rgba(200, 160, 160, .45);
+            cursor: pointer;
+            transition: color .2s;
+            white-space: nowrap;
+        }
+        .tab-btn:hover {
+            color: rgba(200, 160, 160, .8);
+        }
+        .tab-btn.active {
+            color: #fff;
+        }
+        .tab-btn:focus-visible,
+        #panel-close:focus-visible,
+        .expand-btn:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, .6);
+            outline-offset: 2px;
+            border-radius: 3px;
+        }
+
+        .tab-indicator {
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            height: 2px;
+            width: 0;
+            border-radius: 2px;
+            background: var(--cc, #cc3333);
+            box-shadow: 0 0 10px var(--cc, #cc3333);
+            transition: transform .4s var(--ease), width .4s var(--ease);
+        }
+
+        .kessoku-stat {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 79, 163, 0.06);
+            border: 1px solid rgba(255, 79, 163, 0.2);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+        }
+        .kessoku-stat-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .kessoku-stat-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .kessoku-stat-value {
+            font-family: 'Dela Gothic One', sans-serif;
+            font-size: 18px;
+            color: #ff4fa3;
+            line-height: 1;
+            margin-bottom: 2px;
+        }
+        .kessoku-stat-label {
+            font-size: 10px;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            color: rgba(200, 160, 160, .5);
+        }
+        .kessoku-stat-sub {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .35);
+            white-space: nowrap;
+        }
+
+        #page-content {
+            position: absolute;
+            top: 162px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: auto;
+            padding: 22px 24px 32px;
+            color: #e8d8d8;
+            font-size: 14px;
+            line-height: 1.85;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(160, 50, 50, .35) transparent;
+            z-index: 1;
+        }
+        #page-content::-webkit-scrollbar {
+            width: 3px;
+        }
+        #page-content::-webkit-scrollbar-thumb {
+            background: rgba(160, 50, 50, .4);
+            border-radius: 2px;
+        }
+
+        #page-content.content-anim {
+            animation: contentIn .45s var(--ease) both;
+        }
+        @keyframes contentIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #page-content h3 {
+            font-family: 'Dela Gothic One', sans-serif;
+            font-size: 14px;
+            color: #fff;
+            letter-spacing: .06em;
+            margin: 20px 0 8px;
+        }
+        #page-content h3:first-child {
+            margin-top: 0;
+        }
+        #page-content h4 {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, .6);
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            margin: 14px 0 6px;
+        }
+        #page-content p {
+            margin-bottom: 10px;
+            color: #d8c8c8;
+        }
+        #page-content ul {
+            padding-left: 18px;
+            margin-bottom: 10px;
+        }
+        #page-content li {
+            margin-bottom: 4px;
+            color: #d8c8c8;
+        }
+        #page-content em {
+            color: #e8aaaa;
+            font-style: italic;
+        }
+        #page-content strong {
+            color: #fff;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 9px;
+            margin: 2px 3px 2px 0;
+            font-size: 10px;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            border-radius: 3px;
+            border: 1px solid rgba(160, 60, 60, .4);
+            background: rgba(160, 40, 40, .15);
+            color: rgba(210, 140, 140, .9);
+            transition: transform .2s var(--ease-soft);
+        }
+        .tag:hover {
+            transform: translateY(-1px);
+        }
+
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-size: 11px;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: rgba(200, 160, 160, .55);
+            width: 85px;
+            flex-shrink: 0;
+        }
+        .stat-bar-wrap {
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, .08);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .stat-bar {
+            height: 100%;
+            border-radius: 2px;
+            background: #e05555;
+            transition: width .8s var(--ease);
+        }
+
+        .anime-library {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .anime-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.03);
+            transition: border-color .25s, background .25s, transform .25s var(--ease-soft);
+            opacity: 0;
+            animation: cardIn .5s var(--ease) both;
+        }
+
+        @keyframes cardIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .anime-card:hover {
+            border-color: rgba(255, 255, 255, 0.11);
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .anime-card-glow {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity .3s;
+            pointer-events: none;
+            border-radius: 16px;
+        }
+        .anime-card:hover .anime-card-glow {
+            opacity: 1;
+        }
+
+        .anime-card-inner {
+            position: relative;
+            display: flex;
+            gap: 14px;
+            padding: 14px;
+        }
+
+        .anime-cover-wrap {
+            position: relative;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+        }
+        .anime-cover {
+            width: 74px;
+            height: 74px;
+            object-fit: cover;
+            border-radius: 10px;
+            display: block;
+        }
+
+        .anime-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .anime-title {
+            font-family: 'Dela Gothic One', sans-serif;
+            font-size: 13px;
+            color: #fff;
+            letter-spacing: .02em;
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .anime-badges {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .anime-badge {
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            color: rgba(220, 200, 200, .8);
+        }
+
+        .anime-progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .anime-progress-label {
+            font-size: 10px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: rgba(200, 160, 160, .5);
+        }
+        .anime-progress-track {
+            width: 100%;
+            height: 5px;
+            background: rgba(255, 255, 255, .07);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .anime-progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width .8s var(--ease);
+        }
+
+        .anime-meta {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .anime-meta-pill {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 11px;
+            color: #c8b8b8;
+        }
+        .anime-timestamp {
+            font-size: 11px;
+            color: rgba(200, 160, 160, .45);
+        }
+
+        .anime-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .anime-title-row .anime-title {
+            margin-bottom: 0;
+            flex: 1;
+            min-width: 0;
+        }
+        .anime-rating {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            flex-shrink: 0;
+            padding: 3px 7px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .anime-footer-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 8px;
+            flex-direction: column;
+        }
+
+        .song-player {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 8px;
+            padding: 5px 9px 5px 6px;
+            flex: 1;
+            min-width: 0;
+            max-width: 175px;
+        }
+        .song-play-btn {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--song-accent, #cc3333);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+            transition: transform .15s, opacity .15s;
+        }
+        .song-play-btn:hover {
+            transform: scale(1.1);
+            opacity: .85;
+        }
+        .song-info {
+            min-width: 0;
+        }
+        .song-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, .8);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .song-artist {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .5);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        .expand-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 8px;
+            padding: 5px 10px;
+            color: var(--exp-color, rgba(200, 160, 160, .7));
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 11px;
+            letter-spacing: .06em;
+            cursor: pointer;
+            transition: background .2s, border-color .2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+            text-decoration: none;
+        }
+        .expand-btn:hover {
+            background: rgba(255, 255, 255, 0.09);
+        }
+        .expand-chevron {
+            transition: transform .25s var(--ease);
+        }
+        .expand-chevron.rotated {
+            transform: rotate(180deg);
+        }
+
+        .seasons-panel {
+            padding: 0 14px 14px;
+            animation: contentIn .35s var(--ease) both;
+        }
+        .seasons-divider {
+            height: 1px;
+            margin-bottom: 12px;
+            border-radius: 1px;
+        }
+        .seasons-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .season-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        .season-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, .7);
+            flex: 1;
+            min-width: 0;
+        }
+        .season-note {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .4);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .season-progress-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .season-progress-track {
+            flex: 1;
+            height: 3px;
+            background: rgba(255, 255, 255, .06);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .season-progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width .8s var(--ease);
+        }
+        .season-ep-count {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .4);
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 36px;
+            text-align: right;
+        }
+        .seasons-count {
+            border-width: 1px;
+            border-style: solid;
+        }
+        .anime-card.expanded {
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .lastfm-widget {
+            background: rgba(210, 40, 40, 0.06);
+            border: 1px solid rgba(210, 40, 40, 0.22);
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-bottom: 18px;
+        }
+        .lastfm-header {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 10px;
+        }
+        .lastfm-logo {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+        .lastfm-label {
+            font-size: 10px;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: rgba(210, 100, 100, .7);
+            flex: 1;
+        }
+        .lastfm-username {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .4);
+            letter-spacing: .05em;
+        }
+        .lastfm-tracks {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .lastfm-track {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 9px;
+            border-radius: 9px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background .2s;
+            text-decoration: none;
+        }
+        .lastfm-track:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .lastfm-track-art {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .lastfm-track-art-placeholder {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, .2);
+            font-size: 16px;
+        }
+        .lastfm-track-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .lastfm-track-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, .88);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+        }
+        .lastfm-track-artist {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .5);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .lastfm-track-time {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .35);
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .lastfm-now-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #e05555;
+            flex-shrink: 0;
+            animation: lfpulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes lfpulse {
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: .4;
+                transform: scale(.8);
+            }
+        }
+        .lastfm-error {
+            font-size: 11px;
+            color: rgba(200, 100, 100, .6);
+            text-align: center;
+            padding: 8px 0;
+        }
+        .lastfm-loading {
+            font-size: 11px;
+            color: rgba(200, 160, 160, .4);
+            letter-spacing: .08em;
+            text-align: center;
+            padding: 8px 0;
+            animation: hpulse 1.5s ease-in-out infinite;
+        }
+        .lastfm-config-note {
+            font-size: 10px;
+            color: rgba(200, 140, 100, .55);
+            text-align: center;
+            padding: 6px 0;
+            letter-spacing: .05em;
+        }
+
+        @media (max-width: 720px) {
+            #app {
+                width: 100vw;
+            }
+            #app.open {
+                transform: none;
+            }
+            #stage-wrap {
+                width: 100vw;
+            }
+            #panel {
+                position: fixed;
+                inset: 0;
+                width: 100vw;
+                height: 100vh;
+                border-left: none;
+                transform: translateY(100%);
+                transition: transform .45s var(--ease);
+                z-index: 50;
+            }
+            #app.open #panel {
+                transform: translateY(0);
+            }
+        }
+
+        .game-launcher {
+            position: fixed;
+            top: 22px;
+            left: 22px;
+            z-index: 40;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(9, 6, 13, 0.75);
+            border: 1px solid rgba(224, 85, 85, .35);
+            color: rgba(255, 225, 225, .85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: transform .25s var(--ease-soft), border-color .25s, background .25s, box-shadow .25s;
+            animation: charIn .8s var(--ease) .7s both;
+        }
+        .game-launcher:hover {
+            transform: translateY(-2px) scale(1.05);
+            border-color: rgba(224, 85, 85, .7);
+            box-shadow: 0 0 18px rgba(224, 85, 85, .35);
+        }
+        .game-launcher svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .quiz-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .quiz-intro {
+            font-size: 12px;
+            color: rgba(200, 160, 160, .6);
+            margin-bottom: 2px;
+        }
+
+        .quiz-visual {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px 2px;
+        }
+
+        .quiz-play-btn {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--cc, #cc3333);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .15s, opacity .15s, box-shadow .25s;
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+        }
+        .quiz-play-btn:hover {
+            transform: scale(1.06);
+        }
+        .quiz-play-btn:disabled {
+            opacity: .35;
+            cursor: default;
+            transform: none;
+        }
+        .quiz-play-btn svg {
+            width: 26px;
+            height: 26px;
+        }
+
+        .quiz-progress {
+            display: flex;
+            gap: 6px;
+        }
+        .quiz-dot {
+            flex: 1;
+            text-align: center;
+            padding: 6px 2px;
+            border-radius: 8px;
+            font-size: 10px;
+            letter-spacing: .04em;
+            color: rgba(200, 160, 160, .4);
+            background: rgba(255, 255, 255, .04);
+            border: 1px solid rgba(255, 255, 255, .06);
+            transition: background .25s, border-color .25s, color .25s;
+        }
+        .quiz-dot.used {
+            background: rgba(255, 255, 255, .03);
+            color: rgba(200, 160, 160, .3);
+            border-color: rgba(255, 255, 255, .05);
+        }
+        .quiz-dot.current {
+            background: color-mix(in srgb, var(--cc, #cc3333) 18%, transparent);
+            border-color: color-mix(in srgb, var(--cc, #cc3333) 55%, transparent);
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .quiz-guess-row {
+            position: relative;
+            display: flex;
+            gap: 8px;
+        }
+        .quiz-input {
+            flex: 1;
+            min-width: 0;
+            background: rgba(255, 255, 255, .05);
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 9px;
+            padding: 10px 12px;
+            color: #fff;
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 13px;
+            outline: none;
+            transition: border-color .2s, background .2s;
+        }
+        .quiz-input::placeholder {
+            color: rgba(200, 160, 160, .35);
+        }
+        .quiz-input:focus {
+            border-color: var(--cc, #cc3333);
+            background: rgba(255, 255, 255, .07);
+        }
+        .quiz-input:disabled {
+            opacity: .45;
+        }
+        .quiz-submit-btn {
+            flex-shrink: 0;
+            padding: 0 16px;
+            border-radius: 9px;
+            border: none;
+            background: var(--cc, #cc3333);
+            color: #fff;
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .05em;
+            cursor: pointer;
+            transition: opacity .2s, transform .15s;
+            min-width: 58px;
+        }
+        .quiz-submit-btn:hover {
+            transform: translateY(-1px);
+        }
+        .quiz-submit-btn:disabled {
+            opacity: .35;
+            cursor: default;
+            transform: none;
+        }
+
+        .quiz-suggestions {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 66px;
+            max-height: 168px;
+            overflow-y: auto;
+            background: rgba(14, 10, 17, .97);
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 10px;
+            z-index: 6;
+            display: none;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, .4);
+        }
+        .quiz-suggestions.open {
+            display: block;
+        }
+        .quiz-suggestion-item {
+            padding: 8px 12px;
+            font-size: 12px;
+            color: rgba(230, 220, 220, .85);
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255, 255, 255, .04);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .quiz-suggestion-item:last-child {
+            border-bottom: none;
+        }
+        .quiz-suggestion-item:hover {
+            background: rgba(255, 255, 255, .06);
+        }
+        .quiz-suggestion-item:active {
+            background: rgba(255, 255, 255, .10);
+        }
+
+        .quiz-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .quiz-actions .expand-btn {
+            flex: 1;
+            justify-content: center;
+        }
+
+        .quiz-wrong-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .quiz-wrong-chip {
+            font-size: 10px;
+            letter-spacing: .04em;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: rgba(224, 85, 85, .1);
+            border: 1px solid rgba(224, 85, 85, .25);
+            color: rgba(230, 150, 150, .85);
+            text-decoration: line-through;
+        }
+
+        .quiz-result {
+            padding: 14px 16px;
+            border-radius: 12px;
+            animation: cardIn .4s var(--ease) both;
+        }
+        .quiz-result.win {
+            background: rgba(100, 200, 140, .09);
+            border: 1px solid rgba(100, 200, 140, .3);
+        }
+        .quiz-result.lose {
+            background: rgba(224, 85, 85, .09);
+            border: 1px solid rgba(224, 85, 85, .3);
+        }
+        .quiz-result-title {
+            font-family: 'Dela Gothic One', sans-serif;
+            font-size: 13px;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .quiz-result-sub {
+            font-size: 12px;
+            color: rgba(210, 200, 200, .7);
+        }
+        .quiz-result-sub b {
+            color: #fff;
+        }
+
+        .quiz-newsong-btn {
+            align-self: flex-start;
+            padding: 10px 18px;
+            border-radius: 9px;
+            border: none;
+            background: var(--cc, #cc3333);
+            color: #fff;
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .05em;
+            cursor: pointer;
+            transition: transform .15s, opacity .2s;
+        }
+        .quiz-newsong-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .quiz-loading,
+        .quiz-empty {
+            font-size: 12px;
+            color: rgba(200, 160, 160, .5);
+            text-align: center;
+            padding: 24px 0;
+            letter-spacing: .05em;
+        }
+
+        .quiz-settings-block {
+            margin-bottom: 4px;
+        }
+        .quiz-settings-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, .55);
+            margin-bottom: 8px;
+        }
+        .quiz-settings-desc {
+            font-size: 11px;
+            color: rgba(200, 160, 160, .45);
+            margin-top: 6px;
+            line-height: 1.6;
+        }
+
+        .quiz-segmented {
+            display: flex;
+            background: rgba(255, 255, 255, .04);
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 10px;
+            padding: 3px;
+            gap: 3px;
+        }
+        .quiz-segmented button {
+            flex: 1;
+            padding: 8px 4px;
+            border-radius: 7px;
+            border: none;
+            background: transparent;
+            color: rgba(200, 160, 160, .55);
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            cursor: pointer;
+            transition: background .2s, color .2s;
+        }
+        .quiz-segmented button.active {
+            background: var(--cc, #cc3333);
+            color: #fff;
+        }
+
+        .quiz-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid rgba(255, 255, 255, .06);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .quiz-toggle-copy {
+            min-width: 0;
+        }
+        .quiz-toggle-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .quiz-toggle-desc {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .45);
+            margin-top: 2px;
+        }
+        .quiz-switch {
+            flex-shrink: 0;
+            width: 40px;
+            height: 22px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .12);
+            border: 1px solid rgba(255, 255, 255, .1);
+            position: relative;
+            cursor: pointer;
+            transition: background .2s;
+        }
+        .quiz-switch.on {
+            background: var(--cc, #cc3333);
+        }
+        .quiz-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform .2s var(--ease);
+        }
+        .quiz-switch.on::after {
+            transform: translateX(18px);
+        }
+
+        .quiz-stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .quiz-stat-card {
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid rgba(255, 255, 255, .06);
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+        .quiz-stat-value {
+            font-family: 'Dela Gothic One', sans-serif;
+            font-size: 18px;
+            color: var(--cc, #cc3333);
+            line-height: 1;
+            margin-bottom: 3px;
+        }
+        .quiz-stat-label {
+            font-size: 10px;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: rgba(200, 160, 160, .5);
+        }
+
+        .quiz-dist-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+        .quiz-dist-label {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .5);
+            width: 32px;
+            flex-shrink: 0;
+        }
+        .quiz-dist-track {
+            flex: 1;
+            height: 6px;
+            background: rgba(255, 255, 255, .06);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .quiz-dist-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--cc, #cc3333);
+            transition: width .6s var(--ease);
+        }
+        .quiz-dist-count {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .4);
+            width: 18px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .quiz-history-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 9px;
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid rgba(255, 255, 255, .05);
+        }
+        .quiz-history-result {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .quiz-history-result.win {
+            background: rgba(100, 200, 140, .18);
+            color: #7fd8a0;
+        }
+        .quiz-history-result.lose {
+            background: rgba(224, 85, 85, .18);
+            color: #e58a8a;
+        }
+        .quiz-history-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .quiz-history-name {
+            font-size: 11px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, .85);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .quiz-history-meta {
+            font-size: 10px;
+            color: rgba(200, 160, 160, .4);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: .001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: .001ms !important;
+            }
+        }
+    </style>
 </head>
+
 <body>
-<div id="app">
-  <div id="stage-wrap">
-    <img id="stage-img" src="assets/background.webp" alt="" draggable="false">
-    <div id="scene">
+    <div id="app">
+        <div id="stage-wrap">
+            <img id="stage-img" src="assets/background.webp" alt="" draggable="false" />
+            <div id="scene">
 
-      <div class="char" id="char-ryo">
-        <img src="assets/ryo.gif" alt="Ryo">
-        <div class="hitbox" onclick="openChar('ryo')"></div>
-      </div>
-      <div class="char" id="char-ikuyo">
-        <img src="assets/kita.gif" alt="Ikuyo">
-        <div class="hitbox" onclick="openChar('ikuyo')"></div>
-      </div>
-      <div class="char" id="char-nijika">
-        <img src="assets/nijika.gif" alt="Nijika">
-        <div class="hitbox" onclick="openChar('nijika')"></div>
-      </div>
-      <div class="char" id="char-bocchi">
-        <img src="assets/hitori.gif" alt="Bocchi">
-        <div class="hitbox" onclick="openChar('bocchi')"></div>
-      </div>
+                <div class="char" id="char-ryo">
+                    <img src="assets/ryo.gif" alt="Ryo" />
+                    <div class="hitbox" onclick="openChar('ryo')"></div>
+                </div>
+                <div class="char" id="char-ikuyo">
+                    <img src="assets/kita.gif" alt="Ikuyo" />
+                    <div class="hitbox" onclick="openChar('ikuyo')"></div>
+                </div>
+                <div class="char" id="char-nijika">
+                    <img src="assets/nijika.gif" alt="Nijika" />
+                    <div class="hitbox" onclick="openChar('nijika')"></div>
+                </div>
+                <div class="char" id="char-bocchi">
+                    <img src="assets/hitori.gif" alt="Bocchi" />
+                    <div class="hitbox" onclick="openChar('bocchi')"></div>
+                </div>
 
-      <div id="hint"><span class="hint-chevron">▾</span> click a member</div>
-    </div>
-  </div>
-  <div id="panel">
-    <div id="panel-header">
-      <button id="panel-close" onclick="closePanel()">✕</button>
-      <div id="char-name"></div>
-      <div id="char-role"></div>
-    </div>
-    <div id="tab-bar"></div>
-    <div id="page-content"></div>
-  </div>
-</div>
-
-<button id="game-launcher" class="game-launcher" onclick="openGame()" aria-label="Play the music quiz" title="Music Quiz">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M9 18V5l12-2v13"/>
-    <circle cx="6" cy="18" r="3"/>
-    <circle cx="18" cy="16" r="3"/>
-  </svg>
-</button>
-
-<script>
-
-let currentAudio = null;
-let currentSongBtn = null;
-
-function playSong(btn, url, franchiseId) {
-  if (currentAudio && !currentAudio.paused && currentSongBtn === btn) {
-    currentAudio.pause();
-    btn.innerHTML = getSongIcon('play');
-    currentSongBtn = null;
-    return;
-  }
-  if (currentAudio) {
-    currentAudio.pause();
-    if (currentSongBtn) currentSongBtn.innerHTML = getSongIcon('play');
-  }
-  currentAudio = new Audio(url);
-  currentAudio.volume = 0.7;
-  currentAudio.play().catch(() => {});
-  btn.innerHTML = getSongIcon('pause');
-  currentSongBtn = btn;
-  currentAudio.onended = () => {
-    btn.innerHTML = getSongIcon('play');
-    currentSongBtn = null;
-  };
-}
-
-function getSongIcon(state) {
-  return state === 'play'
-    ? `<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><polygon points="5,3 19,12 5,21"/></svg>`
-    : `<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>`;
-}
-
-const animeList = [
-  {
-    id: "glt",
-    title: "Girls Last Tour",
-    image: "https://m.media-amazon.com/images/S/pv-target-images/b275e3f60ef74523ec1a4c974ea21db985f01b69c9668f5b4ad7c6ea624cc425.jpg",
-    started: "2026-08-07T11:26:32+08:00",
-    animeStatus: "Completed",
-    mangaStatus: "Completed",
-    watchedEpisodes: 12,
-    totalEpisodes: 12,
-    accentColor: "#ababab",
-    glowColor: "rgba(255, 255, 255, 0.38)",
-    rating: 10,
-    song: {
-    	title: "Ugaku, Ugaku",
-    	artist: "Chito & Yuuri",
-    	url: "https://static.wikia.nocookie.net/girls-last-tour/images/d/d9/1_%E5%8B%95%E3%81%8F%E3%80%81%E5%8B%95%E3%81%8F.ogg/revision/latest?cb=20181210064148",
-    },
-    seasons: [
-      {
-        title: "Girls Last Tour",
-        animeStatus: "Watching",
-        mangaStatus: "Unread",
-        watchedEpisodes: 7,
-        totalEpisodes: 12,
-        note: "Main series"
-      }
-    ]
-  },
-  {
-    id: "bocchi",
-    title: "Bocchi The Rock!",
-    image: "https://a.storyblok.com/f/178900/960x540/74b4297d75/cr_bocchi_hero.png/m/filters:quality(95)format(webp)",
-    started: "2026-03-28T11:32:12+08:00",
-    animeStatus: "Completed",
-    mangaStatus: "100%",
-    watchedEpisodes: 14,
-    totalEpisodes: 14,
-    accentColor: "#ff4fa3",
-    glowColor: "rgba(255,79,163,0.38)",
-    rating: 9.9,
-    song: { title: "Bundle Up Your Dreams", artist: "Kessoku Band", url: "https://static.wikia.nocookie.net/bocchi-the-rock/images/c/c3/Yume_wo_Tabanete.ogg/revision/latest?cb=20240905134029" },
-    seasons: [
-      {
-        title: "Bocchi The Rock!",
-        animeStatus: "Completed",
-        mangaStatus: "100%",
-        watchedEpisodes: 12,
-        totalEpisodes: 12,
-        note: "Main series"
-      },
-      {
-        title: "Bocchi The Rock! Recap Compilations",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 2,
-        totalEpisodes: 2,
-        note: "Recaps"
-      }
-    ]
-  },
-  {
-    id: "kon",
-    title: "K-ON!",
-    image: "https://static.wikia.nocookie.net/anime/images/5/59/K-on.jpg/revision/latest?cb=20161111115042&path-prefix=de",
-    started: "2026-05-21T19:21:03+08:00",
-    animeStatus: "Completed",
-    mangaStatus: "Unread",
-    watchedEpisodes: 58,
-    totalEpisodes: 58,
-    accentColor: "#23a8f3",
-    glowColor: "rgba(35,168,248,0.38)",
-    rating: 9.8,
-    song: { title: "Cagayake Girls!", artist: "Ho-kago Tea Time", url: "https://archive.org/download/kon-cagayake-girls/1.%20Cagayake%21GIRLS.mp3" },
-    seasons: [
-      {
-        title: "K-ON! Season 1",
-        animeStatus: "Completed",
-        mangaStatus: "Unread",
-        watchedEpisodes: 13,
-        totalEpisodes: 13,
-        note: "13 eps"
-      },
-      {
-        title: "K-ON!! Season 2",
-        animeStatus: "Completed",
-        mangaStatus: "Unread",
-        watchedEpisodes: 26,
-        totalEpisodes: 26,
-        note: "26 eps"
-      },
-      {
-        title: "K-ON! The Movie",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 1,
-        totalEpisodes: 1,
-        note: "Film"
-      },
-      {
-        title: "K-ON! Live House",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 1,
-        totalEpisodes: 1,
-        note: "OVA Continuation for Season 1"
-      },
-      {
-        title: "K-ON! Keikaku! (Planning)",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 1,
-        totalEpisodes: 1,
-        note: "OVA Continuation for Season 2"
-      },
-      {
-        title: "K-ON! Ura On!",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 7,
-        totalEpisodes: 7,
-        note: "Special Short Episode Anime"
-      },
-      {
-        title: "K-ON!! Ura On!!",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 9,
-        totalEpisodes: 9,
-        note: "Second Special Short Episode Anime"
-      },
-    ]
-  },
-  {
-    id: "gbc",
-    title: "Girls Band Cry",
-    image: "https://imgsrv.crunchyroll.com/cdn-cgi/image/fit=contain,format=auto,quality=85,width=1200,height=675/catalog/crunchyroll/ea3ac85312b7d8abfc7c6a6714160c04.png",
-    started: "2026-05-25T09:48:21+08:00",
-    animeStatus: "Completed",
-    mangaStatus: "—",
-    watchedEpisodes: 13,
-    totalEpisodes: 13,
-    accentColor: "#af2636",
-    glowColor: "rgba(176, 38, 54, 0.38)",
-    rating: 10,
-    song: { title: "Wrong World", artist: "Togenashi Togeari", url: "https://cs1.mp3.pm/download/237989872/N0I1YUh3MU9MUG1jR2dvckVJeGhiR3RoWWxlRnRQejB5Q2pSSGZNZkExajdkQkFRbUQ5UUUzQ28wckJ4Q1dGMVFXdm4yUXBCNm4rU2NkdTRadnNDT1Rwa0FNZWszclZWK0hVenNmZjZHNWJJOGNGNGxnS3RtVGFhb2ZLMEQzTDE/TOGENASHI_TOGEARI_-_Wrong_World_(mp3.pm).mp3" },
-    seasons: [
-      {
-        title: "Girls Band Cry",
-        animeStatus: "Completed",
-        mangaStatus: "Unread",
-        watchedEpisodes: 13,
-        totalEpisodes: 13,
-        note: "Main series"
-      }
-    ]
-  },
-  {
-    id: "mygo",
-    title: "BanG Dream! It's MyGO!!!!!",
-    image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR2EFLb3Nf4lJCKCwE2y-MXQdUkexdvAkxn2JSF1zFrGE06LntOFvocaYzw&s=10",
-    started: "2026-05-27T12:16:13+08:00",
-    animeStatus: "Completed",
-    mangaStatus: "Unread",
-    watchedEpisodes: 26,
-    totalEpisodes: 26,
-    accentColor: "#1a87c0",
-    glowColor: "rgba(36,125,192, 0.38)",
-    rating: 8.4,
-    song: { title: "Hitoshizuku", artist: "MyGO!!!!!", url: "https://osanime.com/filedownload/2766899/Hitoshizuku.mp3" },
-    seasons: [
-      {
-        title: "BanG Dream! It's MyGO!!!!!",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 13,
-        totalEpisodes: 13,
-        note: "Season 1"
-      },
-      {
-        title: "BanG Dream! Ave Mujica",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 13,
-        totalEpisodes: 13,
-        note: "Season 2"
-      }
-    ]
-  },
-  {
-    id: "konosuba",
-    title: "Konosuba",
-    image: "https://m.media-amazon.com/images/M/MV5BNTQ5NzJjMjgtNDliNC00YTdmLWJiOTQtYWRiMzY4OWU5NGQ3XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
-    started: "2025-09-25T10:56:18+08:00",
-    animeStatus: "Completed",
-    mangaStatus: "13% • Dropped",
-    seriesLabel: "Light novel",
-    watchedEpisodes: 48,
-    totalEpisodes: 48,
-    accentColor: "#e6d47b",
-    glowColor: "rgba(230, 212, 123, 0.38)",
-    rating: 9.2,
-    song: null,
-    seasons: [
-      {
-        title: "KonoSuba Season 1",
-        animeStatus: "Completed",
-        mangaStatus: "13% • Dropped",
-        watchedEpisodes: 10,
-        totalEpisodes: 10,
-        note: "10 eps"
-      },
-      {
-        title: "KonoSuba Season 2",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 10,
-        totalEpisodes: 10,
-        note: "10 eps"
-      },
-      {
-        title: "KonoSuba: God's Blessing on this Wonderful World! Legend of Crimson",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 1,
-        totalEpisodes: 1,
-        note: "Film"
-      },
-      {
-        title: "KonoSuba Season 3",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 11,
-        totalEpisodes: 11,
-        note: "11 eps"
-      },
-      {
-        title: "KonoSuba OVAs",
-        animeStatus: "Completed",
-        mangaStatus: "—",
-        watchedEpisodes: 4,
-        totalEpisodes: 4,
-        note: "Bonus OVAs"
-      },
-      {
-        title: "KonoSuba: An Explosion on This Wonderful World!",
-        animeStatus: "Completed",
-        mangaStatus: "Unread",
-        watchedEpisodes: 12,
-        totalEpisodes: 12,
-        note: "Megumin spinoff"
-      }
-    ]
-  }
-];
-
-const expandedState = {};
-
-function toggleExpand(id) {
-  expandedState[id] = !expandedState[id];
-  const pc = document.getElementById('page-content');
-  if (pc) {
-    pc.innerHTML = buildAnimeLibraryHTML();
-    animateBars(pc);
-    refreshContentAnim(pc);
-  }
-}
-
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat(navigator.language, { dateStyle:"medium", timeStyle:"short" }).format(date);
-}
-
-function relativeTime(dateString) {
-  const diff = new Date() - new Date(dateString);
-  const days = Math.floor(diff / (1000*60*60*24));
-  if (days <= 0) return `${Math.floor(diff/(1000*60*60))} hours ago`;
-  if (days === 1) return "1 day ago";
-  return `${days} days ago`;
-}
-
-function buildStarRating(rating, accentColor) {
-  const filled = Math.round(rating * 2) / 2; // round to .5
-  const ratingColor = rating >= 9 ? '#f7d44c' : rating >= 7 ? '#a8d8a8' : '#e05555';
-  return `
-    <div class="anime-rating" style="color:${ratingColor}">
-      <svg viewBox="0 0 12 12" fill="currentColor" width="11" height="11" style="vertical-align:-1px">
-        <polygon points="6,1 7.5,4.5 11,5 8.5,7.5 9.2,11 6,9.2 2.8,11 3.5,7.5 1,5 4.5,4.5"/>
-      </svg>
-      <span style="font-size:12px;font-weight:700;letter-spacing:.03em">${rating.toFixed(1)}</span>
-      <span style="font-size:10px;color:rgba(255,255,255,0.25)">/10</span>
-    </div>`;
-}
-
-function buildSongPlayer(song, accentColor, franchiseId) {
-  if (!song) return '';
-  return `
-    <div class="song-player" style="--song-accent:${accentColor}">
-      <button class="song-play-btn" id="songbtn-${franchiseId}" onclick="event.stopPropagation();playSong(this,'${song.url}','${franchiseId}')">
-        ${getSongIcon('play')}
-      </button>
-      <div class="song-info">
-        <div class="song-title">${song.title}</div>
-        <div class="song-artist">${song.artist}</div>
-      </div>
-    </div>`;
-}
-
-function buildSeasonRow(s, accentColor) {
-  const pct2 = (s.watchedEpisodes / s.totalEpisodes) * 100;
-  return `
-    <div class="season-row">
-      <div class="season-header">
-        <div class="season-title">${s.title}</div>
-        ${s.note ? `<div class="season-note">${s.note}</div>` : ''}
-      </div>
-      <div class="season-progress-wrap">
-        <div class="season-progress-track">
-          <div class="season-progress-fill" style="width:${pct2}%;background:${accentColor}"></div>
-        </div>
-        <div class="season-ep-count">${s.watchedEpisodes}/${s.totalEpisodes}</div>
-      </div>
-    </div>`;
-}
-
-function buildAnimeLibraryHTML() {
-  return `
-    <h3>Anime Spotlight</h3>
-    <div class="anime-library">
-      ${animeList.map((anime, idx) => {
-        const pct = (anime.watchedEpisodes / anime.totalEpisodes) * 100;
-        const seriesLabel = anime.seriesLabel || "Manga";
-        const isExpanded = !!expandedState[anime.id];
-        const hasSeasons = anime.seasons && anime.seasons.length > 1;
-        return `
-        <div class="anime-card${isExpanded ? ' expanded' : ''}" style="animation-delay:${idx * 0.06}s">
-          <div class="anime-card-glow" style="background: radial-gradient(circle at top right, ${anime.glowColor}, transparent 60%)"></div>
-          <div class="anime-card-inner">
-            <div class="anime-cover-wrap">
-              <img class="anime-cover" src="${anime.image}" alt="${anime.title}">
+                <div id="hint"><span class="hint-chevron">▾</span> click a member</div>
             </div>
-            <div class="anime-info">
-              <div class="anime-title-row">
-                <div class="anime-title">${anime.title}</div>
-                ${buildStarRating(anime.rating, anime.accentColor)}
+        </div>
+        <div id="panel">
+            <div id="panel-header">
+                <button id="panel-close" onclick="closePanel()">✕</button>
+                <div id="char-name"></div>
+                <div id="char-role"></div>
+            </div>
+            <div id="tab-bar"></div>
+            <div id="page-content"></div>
+        </div>
+    </div>
+
+    <button id="game-launcher" class="game-launcher" onclick="openGame()" aria-label="Play the music quiz" title="Music Quiz">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+        </svg>
+    </button>
+
+    <script>
+        let currentAudio = null;
+        let currentSongBtn = null;
+
+        function playSong(btn, url, franchiseId) {
+            if (currentAudio && !currentAudio.paused && currentSongBtn === btn) {
+                currentAudio.pause();
+                btn.innerHTML = getSongIcon('play');
+                currentSongBtn = null;
+                return;
+            }
+            if (currentAudio) {
+                currentAudio.pause();
+                if (currentSongBtn) currentSongBtn.innerHTML = getSongIcon('play');
+            }
+            currentAudio = new Audio(url);
+            currentAudio.volume = 0.7;
+            currentAudio.play().catch(() => {});
+            btn.innerHTML = getSongIcon('pause');
+            currentSongBtn = btn;
+            currentAudio.onended = () => {
+                btn.innerHTML = getSongIcon('play');
+                currentSongBtn = null;
+            };
+        }
+
+        function getSongIcon(state) {
+            return state === 'play' ?
+                `<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><polygon points="5,3 19,12 5,21"/></svg>` :
+                `<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>`;
+        }
+
+        const animeList = [{
+            id: "glt",
+            title: "Girls Last Tour",
+            image: "https://m.media-amazon.com/images/S/pv-target-images/b275e3f60ef74523ec1a4c974ea21db985f01b69c9668f5b4ad7c6ea624cc425.jpg",
+            started: "2026-08-07T11:26:32+08:00",
+            animeStatus: "Completed",
+            mangaStatus: "Completed",
+            watchedEpisodes: 12,
+            totalEpisodes: 12,
+            accentColor: "#ababab",
+            glowColor: "rgba(255, 255, 255, 0.38)",
+            rating: 10,
+            song: {
+                title: "Ugaku, Ugaku",
+                artist: "Chito & Yuuri",
+                url: "https://static.wikia.nocookie.net/girls-last-tour/images/d/d9/1_%E5%8B%95%E3%81%8F%E3%80%81%E5%8B%95%E3%81%8F.ogg/revision/latest?cb=20181210064148",
+            },
+            seasons: [{ title: "Girls Last Tour", animeStatus: "Watching", mangaStatus: "Unread", watchedEpisodes: 7,
+                    totalEpisodes: 12, note: "Main series" }]
+        }, {
+            id: "bocchi",
+            title: "Bocchi The Rock!",
+            image: "https://a.storyblok.com/f/178900/960x540/74b4297d75/cr_bocchi_hero.png/m/filters:quality(95)format(webp)",
+            started: "2026-03-28T11:32:12+08:00",
+            animeStatus: "Completed",
+            mangaStatus: "100%",
+            watchedEpisodes: 14,
+            totalEpisodes: 14,
+            accentColor: "#ff4fa3",
+            glowColor: "rgba(255,79,163,0.38)",
+            rating: 9.9,
+            song: { title: "Bundle Up Your Dreams", artist: "Kessoku Band",
+                url: "https://static.wikia.nocookie.net/bocchi-the-rock/images/c/c3/Yume_wo_Tabanete.ogg/revision/latest?cb=20240905134029" },
+            seasons: [{ title: "Bocchi The Rock!", animeStatus: "Completed", mangaStatus: "100%", watchedEpisodes: 12,
+                    totalEpisodes: 12, note: "Main series" },
+                { title: "Bocchi The Rock! Recap Compilations", animeStatus: "Completed", mangaStatus: "—",
+                    watchedEpisodes: 2, totalEpisodes: 2, note: "Recaps" }
+            ]
+        }, {
+            id: "kon",
+            title: "K-ON!",
+            image: "https://static.wikia.nocookie.net/anime/images/5/59/K-on.jpg/revision/latest?cb=20161111115042&path-prefix=de",
+            started: "2026-05-21T19:21:03+08:00",
+            animeStatus: "Completed",
+            mangaStatus: "Unread",
+            watchedEpisodes: 58,
+            totalEpisodes: 58,
+            accentColor: "#23a8f3",
+            glowColor: "rgba(35,168,248,0.38)",
+            rating: 9.8,
+            song: { title: "Cagayake Girls!", artist: "Ho-kago Tea Time",
+                url: "https://archive.org/download/kon-cagayake-girls/1.%20Cagayake%21GIRLS.mp3" },
+            seasons: [{ title: "K-ON! Season 1", animeStatus: "Completed", mangaStatus: "Unread", watchedEpisodes: 13,
+                    totalEpisodes: 13, note: "13 eps" },
+                { title: "K-ON!! Season 2", animeStatus: "Completed", mangaStatus: "Unread", watchedEpisodes: 26,
+                    totalEpisodes: 26, note: "26 eps" },
+                { title: "K-ON! The Movie", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 1,
+                    totalEpisodes: 1, note: "Film" },
+                { title: "K-ON! Live House", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 1,
+                    totalEpisodes: 1, note: "OVA Continuation for Season 1" },
+                { title: "K-ON! Keikaku! (Planning)", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 1,
+                    totalEpisodes: 1, note: "OVA Continuation for Season 2" },
+                { title: "K-ON! Ura On!", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 7,
+                    totalEpisodes: 7, note: "Special Short Episode Anime" },
+                { title: "K-ON!! Ura On!!", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 9,
+                    totalEpisodes: 9, note: "Second Special Short Episode Anime" },
+            ]
+        }, {
+            id: "gbc",
+            title: "Girls Band Cry",
+            image: "https://imgsrv.crunchyroll.com/cdn-cgi/image/fit=contain,format=auto,quality=85,width=1200,height=675/catalog/crunchyroll/ea3ac85312b7d8abfc7c6a6714160c04.png",
+            started: "2026-05-25T09:48:21+08:00",
+            animeStatus: "Completed",
+            mangaStatus: "—",
+            watchedEpisodes: 13,
+            totalEpisodes: 13,
+            accentColor: "#af2636",
+            glowColor: "rgba(176, 38, 54, 0.38)",
+            rating: 10,
+            song: { title: "Wrong World", artist: "Togenashi Togeari",
+                url: "https://cs1.mp3.pm/download/237989872/N0I1YUh3MU9MUG1jR2dvckVJeGhiR3RoWWxlRnRQejB5Q2pSSGZNZkExajdkQkFRbUQ5UUUzQ28wckJ4Q1dGMVFXdm4yUXBCNm4rU2NkdTRadnNDT1Rwa0FNZWszclZWK0hVenNmZjZHNWJJOGNGNGxnS3RtVGFhb2ZLMEQzTDE/TOGENASHI_TOGEARI_-_Wrong_World_(mp3.pm).mp3" },
+            seasons: [{ title: "Girls Band Cry", animeStatus: "Completed", mangaStatus: "Unread", watchedEpisodes: 13,
+                    totalEpisodes: 13, note: "Main series" }]
+        }, {
+            id: "mygo",
+            title: "BanG Dream! It's MyGO!!!!!",
+            image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR2EFLb3Nf4lJCKCwE2y-MXQdUkexdvAkxn2JSF1zFrGE06LntOFvocaYzw&s=10",
+            started: "2026-05-27T12:16:13+08:00",
+            animeStatus: "Completed",
+            mangaStatus: "Unread",
+            watchedEpisodes: 26,
+            totalEpisodes: 26,
+            accentColor: "#1a87c0",
+            glowColor: "rgba(36,125,192, 0.38)",
+            rating: 8.4,
+            song: { title: "Hitoshizuku", artist: "MyGO!!!!!",
+                url: "https://osanime.com/filedownload/2766899/Hitoshizuku.mp3" },
+            seasons: [{ title: "BanG Dream! It's MyGO!!!!!", animeStatus: "Completed", mangaStatus: "—",
+                    watchedEpisodes: 13, totalEpisodes: 13, note: "Season 1" },
+                { title: "BanG Dream! Ave Mujica", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 13,
+                    totalEpisodes: 13, note: "Season 2" }
+            ]
+        }, {
+            id: "konosuba",
+            title: "Konosuba",
+            image: "https://m.media-amazon.com/images/M/MV5BNTQ5NzJjMjgtNDliNC00YTdmLWJiOTQtYWRiMzY4OWU5NGQ3XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
+            started: "2025-09-25T10:56:18+08:00",
+            animeStatus: "Completed",
+            mangaStatus: "13% • Dropped",
+            seriesLabel: "Light novel",
+            watchedEpisodes: 48,
+            totalEpisodes: 48,
+            accentColor: "#e6d47b",
+            glowColor: "rgba(230, 212, 123, 0.38)",
+            rating: 9.2,
+            song: null,
+            seasons: [{ title: "KonoSuba Season 1", animeStatus: "Completed", mangaStatus: "13% • Dropped",
+                    watchedEpisodes: 10, totalEpisodes: 10, note: "10 eps" },
+                { title: "KonoSuba Season 2", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 10,
+                    totalEpisodes: 10, note: "10 eps" },
+                { title: "KonoSuba: God's Blessing on this Wonderful World! Legend of Crimson", animeStatus: "Completed",
+                    mangaStatus: "—", watchedEpisodes: 1, totalEpisodes: 1, note: "Film" },
+                { title: "KonoSuba Season 3", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 11,
+                    totalEpisodes: 11, note: "11 eps" },
+                { title: "KonoSuba OVAs", animeStatus: "Completed", mangaStatus: "—", watchedEpisodes: 4,
+                    totalEpisodes: 4, note: "Bonus OVAs" },
+                { title: "KonoSuba: An Explosion on This Wonderful World!", animeStatus: "Completed",
+                    mangaStatus: "Unread", watchedEpisodes: 12, totalEpisodes: 12, note: "Megumin spinoff" }
+            ]
+        }];
+
+        const expandedState = {};
+
+        function toggleExpand(id) {
+            expandedState[id] = !expandedState[id];
+            const pc = document.getElementById('page-content');
+            if (pc) {
+                pc.innerHTML = buildAnimeLibraryHTML();
+                animateBars(pc);
+                refreshContentAnim(pc);
+            }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return new Intl.DateTimeFormat(navigator.language, { dateStyle: "medium", timeStyle: "short" }).format(date);
+        }
+
+        function relativeTime(dateString) {
+            const diff = new Date() - new Date(dateString);
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            if (days <= 0) return `${Math.floor(diff/(1000*60*60))} hours ago`;
+            if (days === 1) return "1 day ago";
+            return `${days} days ago`;
+        }
+
+        function buildStarRating(rating, accentColor) {
+            const filled = Math.round(rating * 2) / 2;
+            const ratingColor = rating >= 9 ? '#f7d44c' : rating >= 7 ? '#a8d8a8' : '#e05555';
+            return `
+            <div class="anime-rating" style="color:${ratingColor}">
+              <svg viewBox="0 0 12 12" fill="currentColor" width="11" height="11" style="vertical-align:-1px">
+                <polygon points="6,1 7.5,4.5 11,5 8.5,7.5 9.2,11 6,9.2 2.8,11 3.5,7.5 1,5 4.5,4.5"/>
+              </svg>
+              <span style="font-size:12px;font-weight:700;letter-spacing:.03em">${rating.toFixed(1)}</span>
+              <span style="font-size:10px;color:rgba(255,255,255,0.25)">/10</span>
+            </div>`;
+        }
+
+        function buildSongPlayer(song, accentColor, franchiseId) {
+            if (!song) return '';
+            return `
+            <div class="song-player" style="--song-accent:${accentColor}">
+              <button class="song-play-btn" id="songbtn-${franchiseId}" onclick="event.stopPropagation();playSong(this,'${song.url}','${franchiseId}')">
+                ${getSongIcon('play')}
+              </button>
+              <div class="song-info">
+                <div class="song-title">${song.title}</div>
+                <div class="song-artist">${song.artist}</div>
               </div>
-              <div class="anime-badges">
-                <div class="anime-badge">${anime.animeStatus}</div>
-                <div class="anime-badge"><span style="color:rgba(255,255,255,0.3)">${seriesLabel} </span>${anime.mangaStatus}</div>
-                ${hasSeasons ? `<div class="anime-badge seasons-count" style="border-color:${anime.accentColor}40;color:${anime.accentColor}">${anime.seasons.length} entries</div>` : ''}
+            </div>`;
+        }
+
+        function buildSeasonRow(s, accentColor) {
+            const pct2 = (s.watchedEpisodes / s.totalEpisodes) * 100;
+            return `
+            <div class="season-row">
+              <div class="season-header">
+                <div class="season-title">${s.title}</div>
+                ${s.note ? `<div class="season-note">${s.note}</div>` : ''}
               </div>
-              <div class="anime-progress-header">
-                <div class="anime-progress-label">Total Episodes</div>
-                <div class="anime-progress-label">${anime.watchedEpisodes} / ${anime.totalEpisodes}</div>
+              <div class="season-progress-wrap">
+                <div class="season-progress-track">
+                  <div class="season-progress-fill" style="width:${pct2}%;background:${accentColor}"></div>
+                </div>
+                <div class="season-ep-count">${s.watchedEpisodes}/${s.totalEpisodes}</div>
               </div>
-              <div class="anime-progress-track">
-                <div class="anime-progress-fill" style="width:${pct}%; background:${anime.accentColor}"></div>
+            </div>`;
+        }
+
+        function buildAnimeLibraryHTML() {
+            return `
+            <h3>Anime Spotlight</h3>
+            <div class="anime-library">
+              ${animeList.map((anime, idx) => {
+                const pct = (anime.watchedEpisodes / anime.totalEpisodes) * 100;
+                const seriesLabel = anime.seriesLabel || "Manga";
+                const isExpanded = !!expandedState[anime.id];
+                const hasSeasons = anime.seasons && anime.seasons.length > 1;
+                return `
+                <div class="anime-card${isExpanded ? ' expanded' : ''}" style="animation-delay:${idx * 0.06}s">
+                  <div class="anime-card-glow" style="background: radial-gradient(circle at top right, ${anime.glowColor}, transparent 60%)"></div>
+                  <div class="anime-card-inner">
+                    <div class="anime-cover-wrap">
+                      <img class="anime-cover" src="${anime.image}" alt="${anime.title}">
+                    </div>
+                    <div class="anime-info">
+                      <div class="anime-title-row">
+                        <div class="anime-title">${anime.title}</div>
+                        ${buildStarRating(anime.rating, anime.accentColor)}
+                      </div>
+                      <div class="anime-badges">
+                        <div class="anime-badge">${anime.animeStatus}</div>
+                        <div class="anime-badge"><span style="color:rgba(255,255,255,0.3)">${seriesLabel} </span>${anime.mangaStatus}</div>
+                        ${hasSeasons ? `<div class="anime-badge seasons-count" style="border-color:${anime.accentColor}40;color:${anime.accentColor}">${anime.seasons.length} entries</div>` : ''}
+                      </div>
+                      <div class="anime-progress-header">
+                        <div class="anime-progress-label">Total Episodes</div>
+                        <div class="anime-progress-label">${anime.watchedEpisodes} / ${anime.totalEpisodes}</div>
+                      </div>
+                      <div class="anime-progress-track">
+                        <div class="anime-progress-fill" style="width:${pct}%; background:${anime.accentColor}"></div>
+                      </div>
+                      <div class="anime-meta">
+                        <div class="anime-meta-pill"><span style="color:rgba(255,255,255,0.3)">Started </span>${formatDate(anime.started)}</div>
+                        <div class="anime-timestamp">${relativeTime(anime.started)}</div>
+                      </div>
+                      <div class="anime-footer-row">
+                        ${buildSongPlayer(anime.song, anime.accentColor, anime.id)}
+                        ${hasSeasons ? `
+                        <button class="expand-btn" onclick="toggleExpand('${anime.id}')" style="--exp-color:${anime.accentColor}">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" class="expand-chevron${isExpanded ? ' rotated' : ''}">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                          <span>${isExpanded ? 'Hide' : 'Series'}</span>
+                        </button>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  ${hasSeasons && isExpanded ? `
+                  <div class="seasons-panel">
+                    <div class="seasons-divider" style="background:${anime.accentColor}40"></div>
+                    <div class="seasons-list">
+                      ${anime.seasons.map(s => buildSeasonRow(s, anime.accentColor)).join('')}
+                    </div>
+                  </div>` : ''}
+                </div>`;
+              }).join('')}
+            </div>`;
+        }
+
+        const CHARS = {
+            bocchi: {
+                name: "About Me",
+                role: "My Identity",
+                color: "#eeb8c4",
+                tabs: {
+                    About: `
+                <h3>About Me</h3>
+                <p>I relate heavily to Bocchi <span style='color: rgba(255, 255, 255, 0.5);'>shes just like me frfr</span></p>
+                <p>Socially awkward, overthinking everything, but deeply passionate about what I do.</p>
+                <p>But unlike Hitori Gotoh im not talented lmao.</p>
+                <p>Also bocchi is goated :)</p>
+                <div class="tag">Introvert</div>
+                <div class="tag">Overthinker</div>
+              `,
+                    Interests: `
+                <h3>My interests</h3>
+                <h4>J-rock</h4>
+                <p>Especially in girl band animes</p>
+                <div class="lastfm-widget" id="lastfm-widget">
+                  <div class="lastfm-header">
+                    <span class="lastfm-label">Recent Plays</span>
+                  </div>
+                  <div class="lastfm-tracks" id="lastfm-tracks">
+                    <div class="lastfm-loading">Loading tracks…</div>
+                  </div>
+                </div>
+                <h4>Anime/Manga</h4>
+                <p>I love watching anime and reading manga.</p>
+                <p>My favorite animes are Bocchi the rock, and Konosuba</p>
+                <p>I also like Umamusume, both the anime and the game.</p>
+                <br>
+                <h4>Programming</h4>
+                <p>I've been programming since i was 7. So im bound to like it.</p>
+                <p>I know how to write in 10 programming languages</p>
+                <p>Yet I prefer writing in Python and Lua</p>
+                <br>
+                <h4>Discord Bot</h4>
+                <p>I love creating Discord Bots.</p>
+              `,
+                    'Anime Library': `__ANIME_LIBRARY__`
+                }
+            },
+            nijika: {
+                name: "Personality",
+                role: "My Passion",
+                color: "#e6d47b",
+                tabs: {
+                    Personality: `
+                <h3>Personality</h3>
+                <a href="https://discord.com/users/735679718506102881" target="_blank">
+                  <button class="expand-btn">
+                    Add me on Discord!
+                  </button>
+                </a>
+                <p>Like nijika, im very passionate about my dreams of becoming a good developer and creating projects.</p>
+                <p>Optimism, leadership, and forcing progress even when nothing works.</p>
+                <div class="tag">Optimistic</div>
+                <div class="tag">Passionate</div>
+                <div class="tag">High Energy</div>
+              `
+                }
+            },
+            ryo: {
+                name: "Projects",
+                role: "My Works",
+                color: "#3a8cc8",
+                tabs: {
+                    Projects: `
+                <h3>Projects</h3>
+                <ul>
+                  <li><strong>UICord</strong> A ComponentV2 Ecosystem for Discord Bots</li>
+                  <li><strong>Uma Bot</strong> Umamusume as a discord bot.</li>
+                </ul>
+                <p>Like Ryo Yamada, she's the core part of Kessoku Music, as she is the one who writes them.
+                  I picked her for this section because this contains all the projects i'm proud of.
+                </p>
+                <div class="tag">It's all discord :(</div>
+              `
+                }
+            },
+            ikuyo: {
+                name: "Statistics",
+                role: "My Stats",
+                color: "#e05555",
+                tabs: {
+                    Skills: `
+                <h3>Statistics</h3>
+                <div class="kessoku-stat" id="kessoku-stat-block">
+                  <div class="kessoku-stat-icon">
+                    <img src="https://static.wikia.nocookie.net/bocchi-the-rock/images/6/68/Kessoku_Band_Logo.svg/revision/latest?cb=20221218052027"
+                      id="kessoku-art"
+                      style="width:50px;height:50px;display:block;"
+                      alt="Kessoku Band">
+                  </div>
+                  <div class="kessoku-stat-info">
+                    <div class="kessoku-stat-value" id="kessoku-minutes">—</div>
+                    <div class="kessoku-stat-label">Minutes</div>
+                  </div>
+                  <div class="kessoku-stat-sub" id="kessoku-scrobbles"></div>
+                </div>
+                <div class="stat-row"><div class="stat-label">Larping</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:96%"></div></div></div>
+                <div class="stat-row"><div class="stat-label">Energy</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:98%"></div></div></div>
+                <div class="stat-row"><div class="stat-label">Passion</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:88%"></div></div></div>
+                <div class="stat-row"><div class="stat-label">Communication</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:13%"></div></div></div>
+                <div class="tag">Bokita♥</div>
+              `
+                }
+            }
+        };
+
+        const IMG_W = 556,
+            IMG_H = 471;
+        const LAYOUT = {
+            ryo: { x: 0.20, y: 0.72, h: 0.26, z: 3 },
+            bocchi: { x: 0.60, y: 0.72, h: 0.27, z: 4 },
+            nijika: { x: 0.48, y: 0.68, h: 0.23, z: 2 },
+            ikuyo: { x: 0.36, y: 0.75, h: 0.27, z: 5 },
+        };
+
+        function hexToRgba(hex, alpha = 1) {
+            hex = hex.replace(/^#/, '');
+            if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            return `rgba(${r},${g},${b},${alpha})`;
+        }
+
+        function getRect() {
+            const sw = document.getElementById('stage-wrap');
+            const ww = sw.clientWidth,
+                wh = sw.clientHeight;
+            const a = IMG_W / IMG_H,
+                wa = ww / wh;
+            let iw, ih, ox, oy;
+            if (wa > a) { ih = wh;
+                iw = ih * a;
+                oy = 0;
+                ox = (ww - iw) / 2; } else { iw = ww;
+                ih = iw / a;
+                ox = 0;
+                oy = (wh - ih) / 2; }
+            return { ox, oy, iw, ih };
+        }
+
+        function positionChars() {
+            const { ox, oy, iw, ih } = getRect();
+            for (const [id, l] of Object.entries(LAYOUT)) {
+                const el = document.getElementById('char-' + id);
+                const img = el.querySelector('img');
+                const ch = ih * l.h;
+                img.style.height = ch + 'px';
+                el.style.left = (ox + l.x * iw) + 'px';
+                el.style.top = (oy + l.y * ih - ch) + 'px';
+                el.style.zIndex = l.z;
+            }
+        }
+
+        let current = null;
+
+        function getTabContent(charId, tabName) {
+            const raw = CHARS[charId].tabs[tabName];
+            if (raw === '__ANIME_LIBRARY__') return buildAnimeLibraryHTML();
+            return raw;
+        }
+
+        function applyTagColors(container, color) {
+            container.querySelectorAll('.tag').forEach(b => {
+                b.style.setProperty('color', hexToRgba(color, 0.9), 'important');
+                b.style.setProperty('background-color', hexToRgba(color, 0.15), 'important');
+                b.style.setProperty('border', `1px solid ${hexToRgba(color, 0.4)}`, 'important');
+            });
+        }
+
+        function animateBars(container) {
+            const bars = container.querySelectorAll('.stat-bar, .anime-progress-fill, .season-progress-fill');
+            bars.forEach(b => {
+                const target = b.style.width;
+                b.style.width = '0%';
+                requestAnimationFrame(() => requestAnimationFrame(() => { b.style.width = target; }));
+            });
+        }
+
+        function refreshContentAnim(pc) {
+            pc.classList.remove('content-anim');
+            void pc.offsetWidth;
+            pc.classList.add('content-anim');
+        }
+
+        function positionIndicator(btn) {
+            const ind = document.getElementById('tab-indicator');
+            if (!ind || !btn) return;
+            ind.style.width = btn.offsetWidth + 'px';
+            ind.style.transform = `translateX(${btn.offsetLeft}px)`;
+        }
+
+        function openChar(id) {
+            if (current === id) { closePanel(); return; }
+            current = id;
+            const d = CHARS[id];
+            const tabs = Object.keys(d.tabs);
+
+            document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
+            document.getElementById('char-' + id).classList.add('active');
+            document.getElementById('scene').classList.add('chars-dimmed');
+
+            document.getElementById('char-name').textContent = d.name;
+            const roleEl = document.getElementById('char-role');
+            roleEl.textContent = d.role;
+            roleEl.style.color = d.color;
+            document.getElementById('panel').style.setProperty('--cc', d.color);
+
+            document.getElementById('tab-bar').innerHTML = tabs.map((t, i) =>
+                `<button class="tab-btn${i===0?' active':''}" onclick="switchTab('${t}',this)">${t}</button>`
+            ).join('') + '<div id="tab-indicator" class="tab-indicator"></div>';
+            positionIndicator(document.querySelector('#tab-bar .tab-btn.active'));
+
+            const pc = document.getElementById('page-content');
+            pc.innerHTML = getTabContent(id, tabs[0]);
+            applyTagColors(pc, d.color);
+            animateBars(pc);
+            refreshContentAnim(pc);
+
+            document.getElementById('app').classList.add('open');
+            document.getElementById('hint').style.opacity = '0';
+            if (id === 'bocchi') setTimeout(loadLastfm, 0);
+            if (id === 'ikuyo') setTimeout(loadKessokuStat, 0);
+        }
+
+        function switchTab(name, btn) {
+            const d = CHARS[current];
+            if (!d) return;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            positionIndicator(btn);
+            const pc = document.getElementById('page-content');
+            pc.innerHTML = getTabContent(current, name);
+            pc.scrollTop = 0;
+            applyTagColors(pc, d.color);
+            animateBars(pc);
+            refreshContentAnim(pc);
+            if (name === 'Interests') setTimeout(loadLastfm, 0);
+        }
+
+        function closePanel() {
+            current = null;
+            document.getElementById('app').classList.remove('open');
+            document.getElementById('scene').classList.remove('chars-dimmed');
+            document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
+            setTimeout(() => document.getElementById('hint').style.opacity = '', 420);
+        }
+
+        const LASTFM_API_KEY = 'cb7d6f9cb5a35e63b4cfb3890d9ad871';
+        const LASTFM_USERNAME = 'Noto_-';
+        const LASTFM_LIMIT = 5;
+
+        function timeSince(unixTs) {
+            const diff = Math.floor(Date.now() / 1000) - parseInt(unixTs, 10);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        async function loadLastfm() {
+            const container = document.getElementById('lastfm-tracks');
+            if (!container) return;
+            try {
+                const url =
+                    `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${encodeURIComponent(LASTFM_USERNAME)}&api_key=${LASTFM_API_KEY}&format=json&limit=${LASTFM_LIMIT}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.error) {
+                    container.innerHTML = `<div class="lastfm-error">Last.fm error: ${data.message}</div>`;
+                    return;
+                }
+                const tracks = data.recenttracks?.track || [];
+                if (!tracks.length) {
+                    container.innerHTML = `<div class="lastfm-error">No recent tracks found.</div>`;
+                    return;
+                }
+                container.innerHTML = tracks.map((t, i) => {
+                    const isNow = t['@attr']?.nowplaying === 'true';
+                    const art = t.image?.find(img => img.size === 'medium')?.['#text'];
+                    const artEl = art ?
+                        `<img class="lastfm-track-art" src="${art}" alt="" loading="lazy">` :
+                        `<div class="lastfm-track-art-placeholder">♪</div>`;
+                    const timeEl = isNow ?
+                        `<div class="lastfm-now-dot"></div>` :
+                        `<div class="lastfm-track-time">${timeSince(t.date?.uts)}</div>`;
+                    return `
+                <a class="lastfm-track" href="${t.url}" target="_blank" rel="noopener">
+                  ${artEl}
+                  <div class="lastfm-track-info">
+                    <div class="lastfm-track-name">${t.name}</div>
+                    <div class="lastfm-track-artist">${t.artist?.['#text'] || ''}</div>
+                  </div>
+                  ${timeEl}
+                </a>`;
+                }).join('');
+            } catch (e) {
+                container.innerHTML = `<div class="lastfm-error">Could not reach Last.fm.</div>`;
+            }
+        }
+
+        async function loadKessokuStat() {
+            try {
+                const url =
+                    `https://ws.audioscrobbler.com/2.0/?method=library.getartists&user=${encodeURIComponent(LASTFM_USERNAME)}&api_key=${LASTFM_API_KEY}&format=json&limit=200`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const artists = data.artists?.artist || [];
+                const kb = artists.find(a => a.name.toLowerCase() === 'kessoku band');
+                const el = document.getElementById('kessoku-minutes');
+                const sub = document.getElementById('kessoku-scrobbles');
+                if (!el) return;
+                if (kb) {
+                    const plays = parseInt(kb.playcount, 10);
+                    const mins = Math.round(plays * 3.5);
+                    el.textContent = mins.toLocaleString();
+                    sub.textContent = plays.toLocaleString() + ' scrobbles';
+                } else {
+                    el.textContent = 'No data';
+                }
+            } catch (e) {
+                const el = document.getElementById('kessoku-minutes');
+                if (el) el.textContent = '—';
+            }
+        }
+
+        document.getElementById('stage-wrap').addEventListener('click', e => {
+            const hit = ['ryo', 'bocchi', 'nijika', 'ikuyo']
+                .some(id => document.getElementById('char-' + id).contains(e.target));
+            if (!hit) closePanel();
+        });
+
+        if (window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)')
+            .matches) {
+            const stageWrapEl = document.getElementById('stage-wrap');
+            const sceneEl = document.getElementById('scene');
+            stageWrapEl.addEventListener('mousemove', (e) => {
+                const r = stageWrapEl.getBoundingClientRect();
+                const px = (e.clientX - r.left) / r.width - 0.5;
+                const py = (e.clientY - r.top) / r.height - 0.5;
+                sceneEl.style.transform = `translate(${px * 10}px, ${py * 6}px)`;
+            });
+            stageWrapEl.addEventListener('mouseleave', () => { sceneEl.style.transform = ''; });
+        }
+
+        window.addEventListener('resize', () => {
+            positionChars();
+            const activeBtn = document.querySelector('#tab-bar .tab-btn.active');
+            if (activeBtn) positionIndicator(activeBtn);
+        });
+        document.getElementById('stage-img').addEventListener('load', positionChars);
+        setTimeout(positionChars, 50);
+    </script>
+
+    <script>
+        const NORMAL_TIMES = [1, 2, 4, 7, 11, 16];
+
+        const STATS_COOKIE = 'musicquiz_stats_v1';
+        const SETTINGS_COOKIE = 'musicquiz_settings_v1';
+
+        function setCookie(name, value, days) {
+            let expires = '';
+            if (days) {
+                const d = new Date();
+                d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+                expires = '; expires=' + d.toUTCString();
+            }
+            document.cookie = name + '=' + value + expires + '; path=/; SameSite=Lax';
+        }
+
+        function getCookie(name) {
+            const m = document.cookie.match('(^|;\\s*)' + name + '=([^;]*)');
+            return m ? m[2] : null;
+        }
+
+        function defaultStats() {
+            return {
+                played: 0,
+                won: 0,
+                streak: 0,
+                bestStreak: 0,
+                buckets: { normal: [0, 0, 0, 0, 0, 0], hard: [0, 0, 0, 0, 0, 0] },
+                history: []
+            };
+        }
+
+        function normalizeBucket(arr) {
+            const out = [0, 0, 0, 0, 0, 0];
+            if (Array.isArray(arr) && arr.length === 6) {
+                for (let i = 0; i < 6; i++) out[i] = Number(arr[i]) || 0;
+            }
+            return out;
+        }
+
+        function loadStats() {
+            const raw = getCookie(STATS_COOKIE);
+            if (!raw) return defaultStats();
+            try {
+                const parsed = JSON.parse(decodeURIComponent(raw));
+                const base = defaultStats();
+                return Object.assign(base, parsed, {
+                    buckets: {
+                        normal: normalizeBucket(parsed.buckets && parsed.buckets.normal),
+                        hard: normalizeBucket(parsed.buckets && parsed.buckets.hard)
+                    },
+                    history: parsed.history || []
+                });
+            } catch (e) { return defaultStats(); }
+        }
+
+        function saveStats(stats) {
+            setCookie(STATS_COOKIE, encodeURIComponent(JSON.stringify(stats)), 365);
+        }
+
+        function recordResult(r, attemptIdx) {
+            const stats = loadStats();
+            stats.played++;
+            const modeKey = r.hard ? 'hard' : 'normal';
+            if (attemptIdx !== null) {
+                stats.won++;
+                stats.streak++;
+                stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
+                stats.buckets[modeKey][attemptIdx] = (stats.buckets[modeKey][attemptIdx] || 0) + 1;
+            } else {
+                stats.streak = 0;
+            }
+            stats.history.unshift({ en: r.song.en, jp: r.song.jp, a: attemptIdx, m: modeKey, l: r.lang, t: Date.now() });
+            stats.history = stats.history.slice(0, 25);
+            saveStats(stats);
+        }
+
+        function resetStats() {
+            if (!confirm('Clear all saved music quiz scores?')) return;
+            setCookie(STATS_COOKIE, '', -1);
+            renderScoresTab();
+        }
+
+        function loadSettings() {
+            const raw = getCookie(SETTINGS_COOKIE);
+            if (!raw) return { lang: 'en', hard: false };
+            try {
+                const parsed = JSON.parse(decodeURIComponent(raw));
+                return { lang: parsed.lang === 'jp' ? 'jp' : 'en', hard: !!parsed.hard };
+            } catch (e) { return { lang: 'en', hard: false }; }
+        }
+
+        function saveSettings() {
+            setCookie(SETTINGS_COOKIE, encodeURIComponent(JSON.stringify(settings)), 365);
+        }
+
+        let settings = loadSettings();
+        let gameTab = 'Play';
+
+        let SONGS = [];
+        let songsLoading = false;
+
+        function parseSongFile(filename) {
+            const name = String(filename);
+            const withJp = name.match(/^(.*)\(([^)]*)\)\.mp3$/i);
+            if (withJp) {
+                const jp = withJp[1].trim(),
+                    en = withJp[2].trim();
+                if (jp && en) return { jp, en, file: filename };
+            }
+            const enOnly = name.match(/^(.*)\.mp3$/i);
+            if (enOnly) {
+                const en = enOnly[1].trim();
+                if (en) return { jp: null, en, file: filename };
+            }
+            return null;
+        }
+
+        async function loadManifest() {
+            songsLoading = true;
+            if (current === 'game' && gameTab === 'Play') renderPlayTab();
+            try {
+                const res = await fetch('music/manifest.json', { cache: 'no-store' });
+                if (!res.ok) throw new Error('manifest not found');
+                const files = await res.json();
+                SONGS = files.map(parseSongFile).filter(Boolean);
+            } catch (e) {
+                console.warn('Music quiz: could not load music/manifest.json', e);
+                SONGS = [];
+            }
+            songsLoading = false;
+            if (current === 'game' && gameTab === 'Play') renderPlayTab();
+        }
+
+        let round = null;
+        let currentHowl = null;
+        let snippetTimer = null;
+
+        function stopSnippet() {
+            clearTimeout(snippetTimer);
+            if (currentHowl) currentHowl.stop();
+        }
+
+        function startRound() {
+            if (!SONGS.length) return;
+            stopSnippet();
+            if (currentHowl) { currentHowl.unload();
+                currentHowl = null; }
+
+            const pool = SONGS.filter(s => s[settings.lang]);
+            if (!pool.length) {
+                round = { empty: true, lang: settings.lang };
+                renderPlayTab();
+                return;
+            }
+
+            const song = pool[Math.floor(Math.random() * pool.length)];
+            const hard = settings.hard;
+            round = {
+                song,
+                lang: settings.lang,
+                hard,
+                times: NORMAL_TIMES.slice(),
+                attempt: 0,
+                finished: false,
+                won: false,
+                wrongGuesses: [],
+                startOffset: 0,
+                ready: false
+            };
+
+            currentHowl = new Howl({
+                src: [`music/${encodeURIComponent(song.file)}`],
+                html5: true,
+                preload: true,
+                volume: 0.8,
+                onload: () => {
+                    if (!round || round.song !== song || !round.hard) return;
+                    const dur = currentHowl.duration() || 0;
+                    const maxSnippet = round.times[round.times.length - 1];
+                    const latestStart = Math.max(0, dur - maxSnippet - 0.25);
+                    round.startOffset = latestStart > 0 ? Math.random() * latestStart : 0;
+                    round.ready = true;
+                    renderPlayTab();
+                }
+            });
+
+            if (!hard) {
+                round.ready = true;
+                round.startOffset = 0;
+            } else {
+                const fallback = () => {
+                    if (!round || round.finished || round.ready) return;
+                    const dur = currentHowl.duration() || 0;
+                    const maxSnippet = round.times[round.times.length - 1];
+                    const latestStart = Math.max(0, dur - maxSnippet - 0.25);
+                    round.startOffset = latestStart > 0 ? Math.random() * latestStart : 0;
+                    round.ready = true;
+                    renderPlayTab();
+                };
+                setTimeout(fallback, 600);
+                setTimeout(fallback, 2000);
+            }
+
+            renderPlayTab();
+        }
+
+        function ensureRound() {
+            if (!round) startRound();
+        }
+
+        function playSnippet() {
+            if (!round || round.empty || round.finished || !currentHowl || !round.ready) return;
+            const dur = round.times[round.attempt];
+            clearTimeout(snippetTimer);
+            currentHowl.seek(round.startOffset || 0);
+            currentHowl.play();
+            snippetTimer = setTimeout(() => {
+                currentHowl.pause();
+            }, dur * 1000);
+        }
+
+        function normalize(str) {
+            return (str || '')
+                .toString()
+                .toLowerCase()
+                .normalize('NFKC')
+                .replace(/[!?.,\-_:;~〜！？。、・「」『』（）()\[\]]/g, '')
+                .replace(/\s+/g, '')
+                .trim();
+        }
+
+        function advanceAttempt() {
+            round.attempt++;
+            if (round.attempt >= round.times.length) {
+                round.finished = true;
+                round.won = false;
+                stopSnippet();
+                recordResult(round, null);
+            }
+            renderPlayTab();
+        }
+
+        function submitGuess(value) {
+            if (!round || round.empty || round.finished) return;
+            const v = (value || '').trim();
+            if (!v) { skipGuess(); return; }
+            const target = normalize(round.song[round.lang]);
+            const guessN = normalize(v);
+            const isCorrect = guessN === target ||
+                (target.length > 3 && guessN.includes(target)) ||
+                (guessN.length > 3 && target.includes(guessN));
+
+            const input = document.getElementById('quiz-input');
+            if (input) input.value = '';
+            const box = document.getElementById('quiz-suggestions');
+            if (box) { box.classList.remove('open');
+                box.innerHTML = ''; }
+
+            if (isCorrect) {
+                round.finished = true;
+                round.won = true;
+                stopSnippet();
+                recordResult(round, round.attempt);
+                renderPlayTab();
+                return;
+            }
+            round.wrongGuesses.push(v);
+            advanceAttempt();
+        }
+
+        function skipGuess() {
+            if (!round || round.empty || round.finished) return;
+            advanceAttempt();
+        }
+
+        function giveUp() {
+            if (!round || round.empty || round.finished) return;
+            round.finished = true;
+            round.won = false;
+            stopSnippet();
+            recordResult(round, null);
+            renderPlayTab();
+        }
+
+        function onGuessInput(value) {
+            const box = document.getElementById('quiz-suggestions');
+            if (!box || !round || round.empty) return;
+            const val = (value || '').trim();
+            if (!val) { box.classList.remove('open');
+                box.innerHTML = ''; return; }
+
+            const q = normalize(val);
+            const seen = new Set();
+            const matches = [];
+            for (const s of SONGS) {
+                const name = s[round.lang];
+                if (!name || seen.has(name)) continue;
+                if (normalize(name).includes(q)) { matches.push(name);
+                    seen.add(name); }
+                if (matches.length >= 8) break;
+            }
+            if (!matches.length) { box.classList.remove('open');
+                box.innerHTML = ''; return; }
+            box.innerHTML = matches.map(name =>
+                `<div class="quiz-suggestion-item" onclick="selectSuggestion(${escapeHtml(JSON.stringify(name))})">${escapeHtml(name)}</div>`
+            ).join('');
+            box.classList.add('open');
+        }
+
+        function selectSuggestion(name) {
+            const input = document.getElementById('quiz-input');
+            if (input) { input.value = name;
+                input.focus({ preventScroll: true }); }
+            const box = document.getElementById('quiz-suggestions');
+            if (box) { box.classList.remove('open');
+                box.innerHTML = ''; }
+            updateGuessButton();
+
+            console.log("CLICKED!!!!")
+        }
+
+        function updateGuessButton() {
+            const input = document.getElementById('quiz-input');
+            const btn = document.getElementById('quiz-submit-btn');
+            if (!input || !btn) return;
+            const val = input.value.trim();
+            btn.textContent = val ? 'Guess' : 'Skip';
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+                "'": '&#39;' }[c]));
+        }
+
+        function quizPlayIcon() {
+            return `<svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><polygon points="6,4 20,12 6,20"/></svg>`;
+        }
+
+        function openGame() {
+            if (current === 'game') { closePanel(); return; }
+            current = 'game';
+            document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
+            document.getElementById('scene').classList.remove('chars-dimmed');
+
+            document.getElementById('char-name').textContent = 'Music Quiz';
+            const roleEl = document.getElementById('char-role');
+            roleEl.textContent = 'Guess the Song';
+            roleEl.style.color = '#e05555';
+            document.getElementById('panel').style.setProperty('--cc', '#e05555');
+
+            const tabs = ['Play', 'Settings', 'Scores'];
+            document.getElementById('tab-bar').innerHTML = tabs.map((t, i) =>
+                `<button class="tab-btn${i === 0 ? ' active' : ''}" onclick="switchGameTab('${t}',this)">${t}</button>`
+            ).join('') + '<div id="tab-indicator" class="tab-indicator"></div>';
+            positionIndicator(document.querySelector('#tab-bar .tab-btn.active'));
+
+            gameTab = 'Play';
+            renderGameTab();
+
+            document.getElementById('app').classList.add('open');
+            document.getElementById('hint').style.opacity = '0';
+
+            if (!SONGS.length && !songsLoading) loadManifest();
+        }
+
+        function switchGameTab(name, btn) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            positionIndicator(btn);
+            gameTab = name;
+            renderGameTab();
+        }
+
+        function renderGameTab() {
+            if (gameTab === 'Play') renderPlayTab();
+            else if (gameTab === 'Settings') renderSettingsTab();
+            else if (gameTab === 'Scores') renderScoresTab();
+        }
+
+        function renderPlayTab() {
+            if (current !== 'game' || gameTab !== 'Play') return;
+            const pc = document.getElementById('page-content');
+            if (!pc) return;
+
+            if (songsLoading) {
+                pc.innerHTML = `<h3>Music Quiz</h3><div class="quiz-loading">Loading song library…</div>`;
+                refreshContentAnim(pc);
+                return;
+            }
+            if (!SONGS.length) {
+                pc.innerHTML = `
+              <h3>Music Quiz</h3>
+              <p class="quiz-empty">No songs found. Drop mp3s into <strong>music/</strong> named
+              <em>JapaneseName(EnglishName).mp3</em>, run <strong>generate_manifest.py</strong>, then reload.</p>`;
+                refreshContentAnim(pc);
+                return;
+            }
+
+            ensureRound();
+            const r = round;
+            if (r.empty) {
+                const langLabel = r.lang === 'jp' ? 'Japanese' : 'English';
+                pc.innerHTML = `
+              <h3>Music Quiz</h3>
+              <p class="quiz-empty">No songs have a ${langLabel} title. Switch languages in Settings, or rename files with a
+              ${langLabel === 'Japanese' ? 'Japanese name, e.g. JapaneseName(EnglishName).mp3' : 'plain EnglishName.mp3'}.</p>`;
+                refreshContentAnim(pc);
+                return;
+            }
+
+            const langLabel = r.lang === 'jp' ? 'Japanese' : 'English';
+            const dotsHtml = r.times.map((t, i) => {
+                const cls = i < r.attempt ? 'used' : (i === r.attempt && !r.finished ? 'current' : '');
+                return `<div class="quiz-dot ${cls}">${t}s</div>`;
+            }).join('');
+
+            const wrongHtml = r.wrongGuesses.length ?
+                `<div class="quiz-wrong-list">${r.wrongGuesses.map(g => `<div class="quiz-wrong-chip">${escapeHtml(g)}</div>`).join('')}</div>` :
+                '';
+
+            let resultHtml = '';
+            if (r.finished) {
+                const target = r.song[r.lang];
+                const otherLang = r.lang === 'jp' ? r.song.en : r.song.jp;
+                resultHtml = `
+              <div class="quiz-result ${r.won ? 'win' : 'lose'}">
+                <div class="quiz-result-title">${r.won ? 'Correct!' : 'Out of attempts'}</div>
+                <div class="quiz-result-sub"><b>${escapeHtml(target)}</b>${otherLang ? ` <span style="opacity:.55">(${escapeHtml(otherLang)})</span>` : ''}${r.won ? ` — guessed at ${r.times[r.attempt]}s` : ''}</div>
               </div>
-              <div class="anime-meta">
-                <div class="anime-meta-pill"><span style="color:rgba(255,255,255,0.3)">Started </span>${formatDate(anime.started)}</div>
-                <div class="anime-timestamp">${relativeTime(anime.started)}</div>
+              <button class="quiz-newsong-btn" onclick="startRound()">Next Song</button>`;
+            }
+
+            pc.innerHTML = `
+            <h3>Music Quiz</h3>
+            <div class="quiz-intro">${r.hard ? 'Hard mode · random start' : 'Normal mode'} · ${langLabel}</div>
+            <div class="quiz-wrap">
+              <div class="quiz-visual">
+                <button class="quiz-play-btn" id="quiz-play-btn" onclick="playSnippet()" ${r.finished || !r.ready ? 'disabled' : ''}>
+                  ${quizPlayIcon()}
+                </button>
               </div>
-              <div class="anime-footer-row">
-                ${buildSongPlayer(anime.song, anime.accentColor, anime.id)}
-                ${hasSeasons ? `
-                <button class="expand-btn" onclick="toggleExpand('${anime.id}')" style="--exp-color:${anime.accentColor}">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" class="expand-chevron${isExpanded ? ' rotated' : ''}">
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                  <span>${isExpanded ? 'Hide' : 'Series'}</span>
-                </button>` : ''}
+              ${!r.ready && r.hard ? '<div class="quiz-loading" style="padding:0 0 4px;">Cueing random start…</div>' : ''}
+              <div class="quiz-progress">${dotsHtml}</div>
+              ${!r.finished ? `
+              <div class="quiz-guess-row">
+                <input type="text" class="quiz-input" id="quiz-input" autocomplete="off"
+                  placeholder="Type the ${langLabel} title…"
+                  oninput="onGuessInput(this.value);updateGuessButton();"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();submitGuess(document.getElementById('quiz-input').value);}">
+                <div class="quiz-suggestions" id="quiz-suggestions"></div>
+                <button class="quiz-submit-btn" id="quiz-submit-btn" onclick="submitGuess(document.getElementById('quiz-input').value)">Skip</button>
+              </div>
+              <div class="quiz-actions">
+                <button class="expand-btn" onclick="skipGuess()">Skip ▸</button>
+                <button class="expand-btn" onclick="giveUp()">Give up</button>
+              </div>` : ''}
+              ${wrongHtml}
+              ${resultHtml}
+            </div>`;
+            refreshContentAnim(pc);
+            const input = document.getElementById('quiz-input');
+            if (input) { input.focus({ preventScroll: true });
+                updateGuessButton(); }
+            const btn = document.getElementById('quiz-submit-btn');
+            if (btn && !r.finished) {
+                btn.textContent = 'Skip';
+            }
+        }
+
+        function renderSettingsTab() {
+            const pc = document.getElementById('page-content');
+            if (!pc) return;
+            pc.innerHTML = `
+            <h3>Settings</h3>
+            <p class="quiz-settings-desc" style="margin:-4px 0 14px;">Changes apply to the next song.</p>
+
+            <div class="quiz-settings-block">
+              <div class="quiz-settings-label">Guess language</div>
+              <div class="quiz-segmented">
+                <button class="${settings.lang === 'en' ? 'active' : ''}" onclick="setLang('en')">English</button>
+                <button class="${settings.lang === 'jp' ? 'active' : ''}" onclick="setLang('jp')">Japanese</button>
               </div>
             </div>
-          </div>
-          ${hasSeasons && isExpanded ? `
-          <div class="seasons-panel">
-            <div class="seasons-divider" style="background:${anime.accentColor}40"></div>
-            <div class="seasons-list">
-              ${anime.seasons.map(s => buildSeasonRow(s, anime.accentColor)).join('')}
+
+            <div class="quiz-settings-block">
+              <div class="quiz-toggle-row">
+                <div class="quiz-toggle-copy">
+                  <div class="quiz-toggle-title">Hard mode</div>
+                  <div class="quiz-toggle-desc">Clip starts from a random point in the song.</div>
+                </div>
+                <div class="quiz-switch ${settings.hard ? 'on' : ''}" onclick="setHard(${!settings.hard})"></div>
+              </div>
             </div>
-          </div>` : ''}
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
+          `;
+            refreshContentAnim(pc);
+        }
 
-const CHARS = {
-  bocchi: {
-    name: "About Me",
-    role: "My Identity",
-    color: "#eeb8c4",
-    tabs: {
-      About: `
-        <h3>About Me</h3>
-        <p>I relate heavily to Bocchi <span style='color: rgba(255, 255, 255, 0.5);'>shes just like me frfr</span></p>
-        <p>Socially awkward, overthinking everything, but deeply passionate about what I do.</p>
-        <p>But unlike Hitori Gotoh im not talented lmao.</p>
-        <p>Also bocchi is goated :)</p>
-        <div class="tag">Introvert</div>
-        <div class="tag">Overthinker</div>
-      `,
-      Interests: `
-        <h3>My interests</h3>
-        <h4>J-rock</h4>
-        <p>Especially in girl band animes</p>
-        <div class="lastfm-widget" id="lastfm-widget">
-          <div class="lastfm-header">
-            <span class="lastfm-label">Recent Plays</span>
-          </div>
-          <div class="lastfm-tracks" id="lastfm-tracks">
-            <div class="lastfm-loading">Loading tracks…</div>
-          </div>
-        </div>
-        <h4>Anime/Manga</h4>
-        <p>I love watching anime and reading manga.</p>
-        <p>My favorite animes are Bocchi the rock, and Konosuba</p>
-        <p>I also like Umamusume, both the anime and the game.</p>
-        <br>
-        <h4>Programming</h4>
-        <p>I've been programming since i was 7. So im bound to like it.</p>
-        <p>I know how to write in 10 programming languages</p>
-        <p>Yet I prefer writing in Python and Lua</p>
-        <br>
-        <h4>Discord Bot</h4>
-        <p>I love creating Discord Bots.</p>
-      `,
-      'Anime Library': `__ANIME_LIBRARY__`
-    }
-  },
+        function setLang(l) { settings.lang = l;
+            saveSettings();
+            renderSettingsTab(); }
 
-  nijika: {
-    name: "Personality",
-    role: "My Passion",
-    color: "#e6d47b",
-    tabs: {
-      Personality: `
-        <h3>Personality</h3>
-        <a href="https://discord.com/users/735679718506102881" target="_blank">
-          <button class="expand-btn">
-            Add me on Discord!
-          </button>
-        </a>
-        
-        <p>Like nijika, im very passionate about my dreams of becoming a good developer and creating projects.</p>
-        <p>Optimism, leadership, and forcing progress even when nothing works.</p>
-        <div class="tag">Optimistic</div>
-        <div class="tag">Passionate</div>
-        <div class="tag">High Energy</div>
-      `
-    }
-  },
+        function setHard(v) { settings.hard = v;
+            saveSettings();
+            renderSettingsTab(); }
 
-  ryo: {
-    name: "Projects",
-    role: "My Works",
-    color: "#3a8cc8",
-    tabs: {
-      Projects: `
-        <h3>Projects</h3>
-        <ul>
-          <li><strong>UICord</strong> A ComponentV2 Ecosystem for Discord Bots</li>
-          <li><strong>Uma Bot</strong> Umamusume as a discord bot.</li>
-        </ul>
-        <p>Like Ryo Yamada, she's the core part of Kessoku Music, as she is the one who writes them.
-          I picked her for this section because this contains all the projects i'm proud of.
-        </p>
-        <div class="tag">It's all discord :(</div>
-      `
-    }
-  },
+        function renderScoresTab() {
+            const pc = document.getElementById('page-content');
+            if (!pc) return;
+            const stats = loadStats();
+            const winPct = stats.played ? Math.round((stats.won / stats.played) * 100) : 0;
+            const normalBuckets = stats.buckets.normal;
+            const hardBuckets = stats.buckets.hard;
+            const maxNormal = Math.max(1, ...normalBuckets);
+            const maxHard = Math.max(1, ...hardBuckets);
 
-  ikuyo: {
-    name: "Statistics",
-    role: "My Stats",
-    color: "#e05555",
-    tabs: {
-      Skills: `
-        <h3>Statistics</h3>
-        <div class="kessoku-stat" id="kessoku-stat-block">
-          <div class="kessoku-stat-icon">
-            <img src="https://static.wikia.nocookie.net/bocchi-the-rock/images/6/68/Kessoku_Band_Logo.svg/revision/latest?cb=20221218052027" 
-              id="kessoku-art" 
-              style="width:50px;height:50px;display:block;" 
-              alt="Kessoku Band">
-          </div>
-            <div class="kessoku-stat-info">
-              <div class="kessoku-stat-value" id="kessoku-minutes">—</div>
-              <div class="kessoku-stat-label">Minutes</div>
+            const distHtml = (buckets, times, max) => buckets.map((c, i) => `
+            <div class="quiz-dist-row">
+              <div class="quiz-dist-label">${times[i]}s</div>
+              <div class="quiz-dist-track"><div class="quiz-dist-fill" style="width:${(c / max) * 100}%"></div></div>
+              <div class="quiz-dist-count">${c}</div>
+            </div>`).join('');
+
+            const historyHtml = stats.history.length ? stats.history.map(h => `
+            <div class="quiz-history-item">
+              <div class="quiz-history-result ${h.a !== null ? 'win' : 'lose'}">${h.a !== null ? '✓' : '✕'}</div>
+              <div class="quiz-history-info">
+                <div class="quiz-history-name">${escapeHtml(h.l === 'jp' ? h.jp : h.en)}</div>
+                <div class="quiz-history-meta">${h.m === 'hard' ? 'Hard' : 'Normal'} · ${h.l === 'jp' ? 'JP' : 'EN'}${h.a !== null ? ' · solved at ' + NORMAL_TIMES[h.a] + 's' : ''}</div>
+              </div>
+            </div>`).join('') : '<p class="quiz-empty">No games played yet.</p>';
+
+            pc.innerHTML = `
+            <h3>Your Scores</h3>
+            <div class="quiz-stats-grid" style="margin-bottom:18px;">
+              <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.played}</div><div class="quiz-stat-label">Played</div></div>
+              <div class="quiz-stat-card"><div class="quiz-stat-value">${winPct}%</div><div class="quiz-stat-label">Win rate</div></div>
+              <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.streak}</div><div class="quiz-stat-label">Current streak</div></div>
+              <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.bestStreak}</div><div class="quiz-stat-label">Best streak</div></div>
             </div>
-          <div class="kessoku-stat-sub" id="kessoku-scrobbles"></div>
-        </div>
-        <div class="stat-row"><div class="stat-label">Larping</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:96%"></div></div></div>
-        <div class="stat-row"><div class="stat-label">Energy</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:98%"></div></div></div>
-        <div class="stat-row"><div class="stat-label">Passion</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:88%"></div></div></div>
-        <div class="stat-row"><div class="stat-label">Communication</div><br><div class="stat-bar-wrap"><div class="stat-bar" style="width:13%"></div></div></div>
-        <div class="tag">Bokita♥</div>
-      `
-    }
-  }
-};
 
-const IMG_W = 556, IMG_H = 471;
-const LAYOUT = {
-  ryo:    { x:0.20, y:0.72, h:0.26, z:3 },
-  bocchi: { x:0.60, y:0.72, h:0.27, z:4 },
-  nijika: { x:0.48, y:0.68, h:0.23, z:2 },
-  ikuyo:  { x:0.36, y:0.75, h:0.27, z:5 },
-};
-
-function hexToRgba(hex, alpha = 1) {
-  hex = hex.replace(/^#/, '');
-  if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
-  const r = parseInt(hex.substring(0,2),16);
-  const g = parseInt(hex.substring(2,4),16);
-  const b = parseInt(hex.substring(4,6),16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function getRect() {
-  const sw = document.getElementById('stage-wrap');
-  const ww = sw.clientWidth, wh = sw.clientHeight;
-  const a = IMG_W/IMG_H, wa = ww/wh;
-  let iw,ih,ox,oy;
-  if (wa>a){ih=wh;iw=ih*a;oy=0;ox=(ww-iw)/2;}
-  else{iw=ww;ih=iw/a;ox=0;oy=(wh-ih)/2;}
-  return {ox,oy,iw,ih};
-}
-
-function positionChars() {
-  const {ox,oy,iw,ih} = getRect();
-  for (const [id,l] of Object.entries(LAYOUT)) {
-    const el = document.getElementById('char-'+id);
-    const img = el.querySelector('img');
-    const ch = ih*l.h;
-    img.style.height = ch+'px';
-    el.style.left   = (ox+l.x*iw)+'px';
-    el.style.top    = (oy+l.y*ih-ch)+'px';
-    el.style.zIndex = l.z;
-  }
-}
-
-let current = null;
-
-function getTabContent(charId, tabName) {
-  const raw = CHARS[charId].tabs[tabName];
-  if (raw === '__ANIME_LIBRARY__') return buildAnimeLibraryHTML();
-  return raw;
-}
-
-function applyTagColors(container, color) {
-  container.querySelectorAll('.tag').forEach(b => {
-    b.style.setProperty('color', hexToRgba(color, 0.9), 'important');
-    b.style.setProperty('background-color', hexToRgba(color, 0.15), 'important');
-    b.style.setProperty('border', `1px solid ${hexToRgba(color, 0.4)}`, 'important');
-  });
-}
-
-// Animate progress/stat bars from 0 to their target width whenever new content mounts
-function animateBars(container) {
-  const bars = container.querySelectorAll('.stat-bar, .anime-progress-fill, .season-progress-fill');
-  bars.forEach(b => {
-    const target = b.style.width;
-    b.style.width = '0%';
-    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.width = target; }));
-  });
-}
-
-// Restart the page-content entrance animation on every render
-function refreshContentAnim(pc) {
-  pc.classList.remove('content-anim');
-  void pc.offsetWidth;
-  pc.classList.add('content-anim');
-}
-
-function positionIndicator(btn) {
-  const ind = document.getElementById('tab-indicator');
-  if (!ind || !btn) return;
-  ind.style.width = btn.offsetWidth + 'px';
-  ind.style.transform = `translateX(${btn.offsetLeft}px)`;
-}
-
-function openChar(id) {
-  if (current === id) { closePanel(); return; }
-  current = id;
-  const d = CHARS[id];
-  const tabs = Object.keys(d.tabs);
-
-  document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
-  document.getElementById('char-'+id).classList.add('active');
-  document.getElementById('scene').classList.add('chars-dimmed');
-
-  document.getElementById('char-name').textContent = d.name;
-  const roleEl = document.getElementById('char-role');
-  roleEl.textContent = d.role;
-  roleEl.style.color = d.color;
-  document.getElementById('panel').style.setProperty('--cc', d.color);
-
-  document.getElementById('tab-bar').innerHTML = tabs.map((t,i) =>
-    `<button class="tab-btn${i===0?' active':''}" onclick="switchTab('${t}',this)">${t}</button>`
-  ).join('') + '<div id="tab-indicator" class="tab-indicator"></div>';
-  positionIndicator(document.querySelector('#tab-bar .tab-btn.active'));
-
-  const pc = document.getElementById('page-content');
-  pc.innerHTML = getTabContent(id, tabs[0]);
-  applyTagColors(pc, d.color);
-  animateBars(pc);
-  refreshContentAnim(pc);
-
-  document.getElementById('app').classList.add('open');
-  document.getElementById('hint').style.opacity = '0';
-  if (id === 'bocchi') setTimeout(loadLastfm, 0);
-  if (id === 'ikuyo') setTimeout(loadKessokuStat, 0);
-}
-
-function switchTab(name, btn) {
-  const d = CHARS[current];
-  if (!d) return;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  positionIndicator(btn);
-  const pc = document.getElementById('page-content');
-  pc.innerHTML = getTabContent(current, name);
-  pc.scrollTop = 0;
-  applyTagColors(pc, d.color);
-  animateBars(pc);
-  refreshContentAnim(pc);
-  if (name === 'Interests') setTimeout(loadLastfm, 0);
-}
-
-function closePanel() {
-  current = null;
-  document.getElementById('app').classList.remove('open');
-  document.getElementById('scene').classList.remove('chars-dimmed');
-  document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
-  setTimeout(() => document.getElementById('hint').style.opacity = '', 420);
-}
-
-const LASTFM_API_KEY  = 'cb7d6f9cb5a35e63b4cfb3890d9ad871';
-const LASTFM_USERNAME = 'Noto_-';
-const LASTFM_LIMIT    = 5;
-
-function timeSince(unixTs) {
-  const diff = Math.floor(Date.now() / 1000) - parseInt(unixTs, 10);
-  if (diff < 60)  return 'just now';
-  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
-  return Math.floor(diff/86400) + 'd ago';
-}
-
-async function loadLastfm() {
-  const container = document.getElementById('lastfm-tracks');
-  if (!container) return;
-
-  try {
-    const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${encodeURIComponent(LASTFM_USERNAME)}&api_key=${LASTFM_API_KEY}&format=json&limit=${LASTFM_LIMIT}`;
-    const res  = await fetch(url);
-    const data = await res.json();
-
-    if (data.error) {
-      container.innerHTML = `<div class="lastfm-error">Last.fm error: ${data.message}</div>`;
-      return;
-    }
-
-    const tracks = data.recenttracks?.track || [];
-    if (!tracks.length) {
-      container.innerHTML = `<div class="lastfm-error">No recent tracks found.</div>`;
-      return;
-    }
-
-    container.innerHTML = tracks.map((t, i) => {
-      const isNow = t['@attr']?.nowplaying === 'true';
-      const art   = t.image?.find(img => img.size === 'medium')?.['#text'];
-      const artEl = art
-        ? `<img class="lastfm-track-art" src="${art}" alt="" loading="lazy">`
-        : `<div class="lastfm-track-art-placeholder">♪</div>`;
-      const timeEl = isNow
-        ? `<div class="lastfm-now-dot"></div>`
-        : `<div class="lastfm-track-time">${timeSince(t.date?.uts)}</div>`;
-      return `
-        <a class="lastfm-track" href="${t.url}" target="_blank" rel="noopener">
-          ${artEl}
-          <div class="lastfm-track-info">
-            <div class="lastfm-track-name">${t.name}</div>
-            <div class="lastfm-track-artist">${t.artist?.['#text'] || ''}</div>
-          </div>
-          ${timeEl}
-        </a>`;
-    }).join('');
-  } catch (e) {
-    container.innerHTML = `<div class="lastfm-error">Could not reach Last.fm.</div>`;
-  }
-}
-
-async function loadKessokuStat() {
-  try {
-    const url = `https://ws.audioscrobbler.com/2.0/?method=library.getartists&user=${encodeURIComponent(LASTFM_USERNAME)}&api_key=${LASTFM_API_KEY}&format=json&limit=200`;
-    const res  = await fetch(url);
-    const data = await res.json();
-    const artists = data.artists?.artist || [];
-    const kb = artists.find(a => a.name.toLowerCase() === 'kessoku band');
-    const el = document.getElementById('kessoku-minutes');
-    const sub = document.getElementById('kessoku-scrobbles');
-    if (!el) return;
-    if (kb) {
-      const plays = parseInt(kb.playcount, 10);
-      const mins  = Math.round(plays * 3.5);
-      el.textContent  = mins.toLocaleString();
-      sub.textContent = plays.toLocaleString() + ' scrobbles';
-    } else {
-      el.textContent = 'No data';
-    }
-  } catch(e) {
-    const el = document.getElementById('kessoku-minutes');
-    if (el) el.textContent = '—';
-  }
-}
-
-document.getElementById('stage-wrap').addEventListener('click', e => {
-  const hit = ['ryo','bocchi','nijika','ikuyo']
-    .some(id => document.getElementById('char-'+id).contains(e.target));
-  if (!hit) closePanel();
-});
-
-// Subtle cursor-parallax on the stage for depth (fine-pointer devices only)
-if (window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  const stageWrapEl = document.getElementById('stage-wrap');
-  const sceneEl = document.getElementById('scene');
-  stageWrapEl.addEventListener('mousemove', (e) => {
-    const r = stageWrapEl.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width - 0.5;
-    const py = (e.clientY - r.top) / r.height - 0.5;
-    sceneEl.style.transform = `translate(${px * 10}px, ${py * 6}px)`;
-  });
-  stageWrapEl.addEventListener('mouseleave', () => { sceneEl.style.transform = ''; });
-}
-
-window.addEventListener('resize', () => {
-  positionChars();
-  const activeBtn = document.querySelector('#tab-bar .tab-btn.active');
-  if (activeBtn) positionIndicator(activeBtn);
-});
-document.getElementById('stage-img').addEventListener('load', positionChars);
-setTimeout(positionChars, 50);
-</script>
-
-<script>
-/* =====================================================================
-   MUSIC QUIZ — "guess the song from a short clip" minigame
-   - Songs are read from music/manifest.json, a plain JSON array of the
-     mp3 filenames sitting in the music/ folder, each named
-     "JapaneseName(EnglishName).mp3". Run generate_manifest.py (included
-     alongside this file) any time you add/remove songs, then re-upload
-     music/manifest.json.
-   - Audio playback uses Howler.js in html5 mode, which plays through the
-     native <audio> element instead of fetching + decoding the whole file
-     into a buffer first. That means the browser streams just the bytes
-     it needs (most static hosts support HTTP range requests), so a
-     0.5s clip starts almost instantly instead of waiting on the full
-     song to download.
-   - Settings (language / hard mode) and past-game stats are both kept
-     in cookies, so they persist across visits on this browser.
-   ===================================================================== */
-
-// ---- reveal schedules -------------------------------------------------
-// Both modes use the same reveal schedule (the classic Heardle timings, 6 tries).
-// Normal mode always plays from the start of the song. Hard mode plays the exact
-// same-length clips, but from a random point in the song instead of the intro —
-// and disables the autocomplete dropdown, so you're guessing blind.
-const NORMAL_TIMES = [1, 2, 4, 7, 11, 16]; // seconds
-
-// ---- cookies ------------------------------------------------------------
-const STATS_COOKIE    = 'musicquiz_stats_v1';
-const SETTINGS_COOKIE = 'musicquiz_settings_v1';
-
-function setCookie(name, value, days) {
-  let expires = '';
-  if (days) {
-    const d = new Date();
-    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
-    expires = '; expires=' + d.toUTCString();
-  }
-  document.cookie = name + '=' + value + expires + '; path=/; SameSite=Lax';
-}
-function getCookie(name) {
-  const m = document.cookie.match('(^|;\\s*)' + name + '=([^;]*)');
-  return m ? m[2] : null;
-}
-
-function defaultStats() {
-  return {
-    played: 0, won: 0, streak: 0, bestStreak: 0,
-    buckets: { normal: [0, 0, 0, 0, 0, 0], hard: [0, 0, 0, 0, 0, 0] },
-    history: []
-  };
-}
-// Both bucket arrays line up with NORMAL_TIMES (6 slots). If an old cookie has a
-// stale shape (e.g. from before hard mode's schedule matched normal mode), it's
-// discarded rather than misread.
-function normalizeBucket(arr) {
-  const out = [0, 0, 0, 0, 0, 0];
-  if (Array.isArray(arr) && arr.length === 6) {
-    for (let i = 0; i < 6; i++) out[i] = Number(arr[i]) || 0;
-  }
-  return out;
-}
-function loadStats() {
-  const raw = getCookie(STATS_COOKIE);
-  if (!raw) return defaultStats();
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw));
-    const base = defaultStats();
-    return Object.assign(base, parsed, {
-      buckets: {
-        normal: normalizeBucket(parsed.buckets && parsed.buckets.normal),
-        hard:   normalizeBucket(parsed.buckets && parsed.buckets.hard)
-      },
-      history: parsed.history || []
-    });
-  } catch (e) { return defaultStats(); }
-}
-function saveStats(stats) {
-  setCookie(STATS_COOKIE, encodeURIComponent(JSON.stringify(stats)), 365);
-}
-function recordResult(r, attemptIdx) {
-  const stats = loadStats();
-  stats.played++;
-  const modeKey = r.hard ? 'hard' : 'normal';
-  if (attemptIdx !== null) {
-    stats.won++;
-    stats.streak++;
-    stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
-    stats.buckets[modeKey][attemptIdx] = (stats.buckets[modeKey][attemptIdx] || 0) + 1;
-  } else {
-    stats.streak = 0;
-  }
-  stats.history.unshift({ en: r.song.en, jp: r.song.jp, a: attemptIdx, m: modeKey, l: r.lang, t: Date.now() });
-  stats.history = stats.history.slice(0, 25);
-  saveStats(stats);
-}
-function resetStats() {
-  if (!confirm('Clear all saved music quiz scores?')) return;
-  setCookie(STATS_COOKIE, '', -1);
-  renderScoresTab();
-}
-
-function loadSettings() {
-  const raw = getCookie(SETTINGS_COOKIE);
-  if (!raw) return { lang: 'en', hard: false };
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw));
-    return { lang: parsed.lang === 'jp' ? 'jp' : 'en', hard: !!parsed.hard };
-  } catch (e) { return { lang: 'en', hard: false }; }
-}
-function saveSettings() {
-  setCookie(SETTINGS_COOKIE, encodeURIComponent(JSON.stringify(settings)), 365);
-}
-
-let settings = loadSettings();
-let gameTab = 'Play';
-
-// ---- song library ---------------------------------------------------
-let SONGS = [];
-let songsLoading = false;
-
-function parseSongFile(filename) {
-  const name = String(filename);
-  // "JapaneseName(EnglishName).mp3"
-  const withJp = name.match(/^(.*)\(([^)]*)\)\.mp3$/i);
-  if (withJp) {
-    const jp = withJp[1].trim(), en = withJp[2].trim();
-    if (jp && en) return { jp, en, file: filename };
-  }
-  // "EnglishName.mp3" — no Japanese title, en-only entry
-  const enOnly = name.match(/^(.*)\.mp3$/i);
-  if (enOnly) {
-    const en = enOnly[1].trim();
-    if (en) return { jp: null, en, file: filename };
-  }
-  return null;
-}
-
-async function loadManifest() {
-  songsLoading = true;
-  if (current === 'game' && gameTab === 'Play') renderPlayTab();
-  try {
-    const res = await fetch('music/manifest.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error('manifest not found');
-    const files = await res.json();
-    SONGS = files.map(parseSongFile).filter(Boolean);
-  } catch (e) {
-    console.warn('Music quiz: could not load music/manifest.json — see generate_manifest.py', e);
-    SONGS = [];
-  }
-  songsLoading = false;
-  if (current === 'game' && gameTab === 'Play') renderPlayTab();
-}
-
-// ---- round state + audio ---------------------------------------------
-let round = null;
-let currentHowl = null;
-let snippetTimer = null;
-
-function stopSnippet() {
-  clearTimeout(snippetTimer);
-  if (currentHowl) currentHowl.stop();
-  const disc = document.getElementById('quiz-disc');
-  if (disc) disc.classList.remove('spinning');
-}
-
-function startRound() {
-  if (!SONGS.length) return;
-  stopSnippet();
-  if (currentHowl) { currentHowl.unload(); currentHowl = null; }
-
-  // Songs with no Japanese title can't be used when guessing in Japanese.
-  const pool = SONGS.filter(s => s[settings.lang]);
-  if (!pool.length) {
-    round = { empty: true, lang: settings.lang };
-    renderPlayTab();
-    return;
-  }
-
-  const song = pool[Math.floor(Math.random() * pool.length)];
-  const hard = settings.hard;
-  round = {
-    song,
-    lang: settings.lang,
-    hard,
-    times: NORMAL_TIMES.slice(),
-    attempt: 0,
-    finished: false,
-    won: false,
-    wrongGuesses: [],
-    startOffset: 0,
-    ready: !hard // normal mode always starts at 0, so no need to wait on duration
-  };
-  currentHowl = new Howl({
-    src: [`music/${encodeURIComponent(song.file)}`],
-    html5: true,     // stream through the native <audio> element (range requests) — no full-file decode
-    preload: true,
-    volume: 0.8,
-    onload: () => {
-      if (!round || round.song !== song || !round.hard) return;
-      const dur = currentHowl.duration() || 0;
-      const maxSnippet = round.times[round.times.length - 1];
-      const latestStart = Math.max(0, dur - maxSnippet - 0.25);
-      round.startOffset = latestStart > 0 ? Math.random() * latestStart : 0;
-      round.ready = true;
-      renderPlayTab();
-    }
-  });
-  renderPlayTab();
-}
-
-function ensureRound() {
-  if (!round) startRound();
-}
-
-function playSnippet() {
-  if (!round || round.empty || round.finished || !currentHowl || !round.ready) return;
-  const dur = round.times[round.attempt];
-  clearTimeout(snippetTimer);
-  currentHowl.seek(round.startOffset || 0);
-  currentHowl.play();
-  const disc = document.getElementById('quiz-disc');
-  if (disc) disc.classList.add('spinning');
-  snippetTimer = setTimeout(() => {
-    currentHowl.pause();
-    if (disc) disc.classList.remove('spinning');
-  }, dur * 1000);
-}
-
-function normalize(str) {
-  return (str || '')
-    .toString()
-    .toLowerCase()
-    .normalize('NFKC')
-    .replace(/[!?.,'’‘"“”\-_:;~〜！？。、・「」『』（）()\[\]]/g, '')
-    .replace(/\s+/g, '')
-    .trim();
-}
-
-function advanceAttempt() {
-  round.attempt++;
-  if (round.attempt >= round.times.length) {
-    round.finished = true;
-    round.won = false;
-    stopSnippet();
-    recordResult(round, null);
-  }
-  renderPlayTab();
-}
-
-function submitGuess(value) {
-  if (!round || round.empty || round.finished) return;
-  const v = (value || '').trim();
-  if (!v) return;
-  const target = normalize(round.song[round.lang]);
-  const guessN = normalize(v);
-  const isCorrect = round.hard
-    ? guessN === target
-    : (guessN === target || (target.length > 3 && guessN.includes(target)) || (guessN.length > 3 && target.includes(guessN)));
-
-  const input = document.getElementById('quiz-input');
-  if (input) input.value = '';
-  const box = document.getElementById('quiz-suggestions');
-  if (box) { box.classList.remove('open'); box.innerHTML = ''; }
-
-  if (isCorrect) {
-    round.finished = true;
-    round.won = true;
-    stopSnippet();
-    recordResult(round, round.attempt);
-    renderPlayTab();
-    return;
-  }
-  round.wrongGuesses.push(v);
-  advanceAttempt();
-}
-
-function skipGuess() {
-  if (!round || round.empty || round.finished) return;
-  advanceAttempt();
-}
-
-function giveUp() {
-  if (!round || round.empty || round.finished) return;
-  round.finished = true;
-  round.won = false;
-  stopSnippet();
-  recordResult(round, null);
-  renderPlayTab();
-}
-
-function onGuessInput(value) {
-  const box = document.getElementById('quiz-suggestions');
-  if (!box || !round || round.empty) return;
-  if (round.hard || !value.trim()) { box.classList.remove('open'); box.innerHTML = ''; return; }
-  const lang = round.lang;
-  const q = normalize(value);
-  const seen = new Set();
-  const matches = [];
-  for (const s of SONGS) {
-    const name = s[lang];
-    if (!name || seen.has(name)) continue;
-    if (normalize(name).includes(q)) { matches.push(name); seen.add(name); }
-    if (matches.length >= 8) break;
-  }
-  if (!matches.length) { box.classList.remove('open'); box.innerHTML = ''; return; }
-  box.innerHTML = matches.map(name =>
-    `<div class="quiz-suggestion-item" onmousedown="selectSuggestion(${JSON.stringify(name)})">${escapeHtml(name)}</div>`
-  ).join('');
-  box.classList.add('open');
-}
-function selectSuggestion(name) {
-  // Clicking a suggestion completes the guess text in the input — it doesn't
-  // submit for you, so you can still double check before hitting Guess/Enter.
-  const input = document.getElementById('quiz-input');
-  if (input) { input.value = name; input.focus({ preventScroll: true }); }
-  const box = document.getElementById('quiz-suggestions');
-  if (box) { box.classList.remove('open'); box.innerHTML = ''; }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-function quizPlayIcon() {
-  return `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="6,4 20,12 6,20"/></svg>`;
-}
-
-// ---- panel integration -------------------------------------------------
-function openGame() {
-  if (current === 'game') { closePanel(); return; }
-  current = 'game';
-  document.querySelectorAll('.char').forEach(c => c.classList.remove('active'));
-  document.getElementById('scene').classList.remove('chars-dimmed');
-
-  document.getElementById('char-name').textContent = 'Music Quiz';
-  const roleEl = document.getElementById('char-role');
-  roleEl.textContent = 'Guess the Song';
-  roleEl.style.color = '#e05555';
-  document.getElementById('panel').style.setProperty('--cc', '#e05555');
-
-  const tabs = ['Play', 'Settings', 'Scores'];
-  document.getElementById('tab-bar').innerHTML = tabs.map((t, i) =>
-    `<button class="tab-btn${i === 0 ? ' active' : ''}" onclick="switchGameTab('${t}',this)">${t}</button>`
-  ).join('') + '<div id="tab-indicator" class="tab-indicator"></div>';
-  positionIndicator(document.querySelector('#tab-bar .tab-btn.active'));
-
-  gameTab = 'Play';
-  renderGameTab();
-
-  document.getElementById('app').classList.add('open');
-  document.getElementById('hint').style.opacity = '0';
-
-  if (!SONGS.length && !songsLoading) loadManifest();
-}
-
-function switchGameTab(name, btn) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  positionIndicator(btn);
-  gameTab = name;
-  renderGameTab();
-}
-
-function renderGameTab() {
-  if (gameTab === 'Play') renderPlayTab();
-  else if (gameTab === 'Settings') renderSettingsTab();
-  else if (gameTab === 'Scores') renderScoresTab();
-}
-
-function renderPlayTab() {
-  if (current !== 'game' || gameTab !== 'Play') return;
-  const pc = document.getElementById('page-content');
-  if (!pc) return;
-
-  if (songsLoading) {
-    pc.innerHTML = `<h3>Music Quiz</h3><div class="quiz-loading">Loading song library…</div>`;
-    refreshContentAnim(pc);
-    return;
-  }
-  if (!SONGS.length) {
-    pc.innerHTML = `
-      <h3>Music Quiz</h3>
-      <p class="quiz-empty">No songs found. Drop mp3s into the <strong>music/</strong> folder named
-      <em>JapaneseName(EnglishName).mp3</em>, run <strong>generate_manifest.py</strong> to build
-      <strong>music/manifest.json</strong>, then reload.</p>`;
-    refreshContentAnim(pc);
-    return;
-  }
-
-  ensureRound();
-  const r = round;
-
-  if (r.empty) {
-    const langLabel = r.lang === 'jp' ? 'Japanese' : 'English';
-    pc.innerHTML = `
-      <h3>Music Quiz</h3>
-      <p class="quiz-empty">None of your songs have a ${langLabel} title yet, so there's nothing to
-      guess in this language. Switch language in Settings, or rename files to include a
-      ${langLabel === 'Japanese' ? 'Japanese name, e.g. JapaneseName(EnglishName).mp3' : 'plain EnglishName.mp3'}.</p>`;
-    refreshContentAnim(pc);
-    return;
-  }
-
-  const langLabel = r.lang === 'jp' ? 'Japanese' : 'English';
-
-  const dotsHtml = r.times.map((t, i) => {
-    const cls = i < r.attempt ? 'used' : (i === r.attempt && !r.finished ? 'current' : '');
-    return `<div class="quiz-dot ${cls}">${t}s</div>`;
-  }).join('');
-
-  const wrongHtml = r.wrongGuesses.length
-    ? `<div class="quiz-wrong-list">${r.wrongGuesses.map(g => `<div class="quiz-wrong-chip">${escapeHtml(g)}</div>`).join('')}</div>`
-    : '';
-
-  let resultHtml = '';
-  if (r.finished) {
-    const target = r.song[r.lang];
-    const otherLang = r.lang === 'jp' ? r.song.en : r.song.jp;
-    resultHtml = `
-      <div class="quiz-result ${r.won ? 'win' : 'lose'}">
-        <div class="quiz-result-title">${r.won ? 'Correct!' : 'Out of attempts'}</div>
-        <div class="quiz-result-sub"><b>${escapeHtml(target)}</b>${otherLang ? ` <span style="opacity:.55">(${escapeHtml(otherLang)})</span>` : ''}${r.won ? ` — guessed at ${r.times[r.attempt]}s` : ''}</div>
-      </div>
-      <button class="quiz-newsong-btn" onclick="startRound()">Next Song</button>`;
-  }
-
-  pc.innerHTML = `
-    <h3>Music Quiz</h3>
-    <div class="quiz-intro">${r.hard ? 'Hard mode — random start point' : 'Normal mode'} · guessing in ${langLabel}</div>
-    <div class="quiz-wrap">
-      <div class="quiz-visual">
-        <button class="quiz-play-btn" id="quiz-play-btn" onclick="playSnippet()" ${r.finished || !r.ready ? 'disabled' : ''}>${quizPlayIcon()}</button>
-        <div class="quiz-disc" id="quiz-disc">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><circle cx="12" cy="12" r="2.4"/></svg>
-        </div>
-      </div>
-      ${!r.ready ? '<div class="quiz-loading" style="padding:0 0 4px;">Cueing a random start point…</div>' : ''}
-      <div class="quiz-progress">${dotsHtml}</div>
-      ${!r.finished ? `
-      <div class="quiz-guess-row">
-        <input type="text" class="quiz-input" id="quiz-input" autocomplete="off"
-          placeholder="Type the ${langLabel} title…"
-          oninput="onGuessInput(this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();submitGuess(document.getElementById('quiz-input').value);}">
-        <div class="quiz-suggestions" id="quiz-suggestions"></div>
-        <button class="quiz-submit-btn" onclick="submitGuess(document.getElementById('quiz-input').value)">Guess</button>
-      </div>
-      <div class="quiz-actions">
-        <button class="expand-btn" onclick="skipGuess()">Skip ▸</button>
-        <button class="expand-btn" onclick="giveUp()">Give up</button>
-      </div>` : ''}
-      ${wrongHtml}
-      ${resultHtml}
-    </div>
-  `;
-  refreshContentAnim(pc);
-  const input = document.getElementById('quiz-input');
-  if (input) input.focus({ preventScroll: true });
-}
-
-function renderSettingsTab() {
-  const pc = document.getElementById('page-content');
-  if (!pc) return;
-  pc.innerHTML = `
-    <h3>Settings</h3>
-    <p class="quiz-settings-desc" style="margin:-4px 0 14px;">Changes apply starting with your next song.</p>
-
-    <div class="quiz-settings-block">
-      <div class="quiz-settings-label">Language to guess in</div>
-      <div class="quiz-segmented">
-        <button class="${settings.lang === 'en' ? 'active' : ''}" onclick="setLang('en')">English</button>
-        <button class="${settings.lang === 'jp' ? 'active' : ''}" onclick="setLang('jp')">Japanese</button>
-      </div>
-    </div>
-
-    <div class="quiz-settings-block">
-      <div class="quiz-toggle-row">
-        <div class="quiz-toggle-copy">
-          <div class="quiz-toggle-title">Hard mode</div>
-          <div class="quiz-toggle-desc">Same clip lengths, but each one starts from a random point in the song instead of the intro — plus free-text guessing only, no autocomplete.</div>
-        </div>
-        <div class="quiz-switch ${settings.hard ? 'on' : ''}" onclick="setHard(${!settings.hard})"></div>
-      </div>
-    </div>
-  `;
-  refreshContentAnim(pc);
-}
-function setLang(l) { settings.lang = l; saveSettings(); renderSettingsTab(); }
-function setHard(v) { settings.hard = v; saveSettings(); renderSettingsTab(); }
-
-function renderScoresTab() {
-  const pc = document.getElementById('page-content');
-  if (!pc) return;
-  const stats = loadStats();
-  const winPct = stats.played ? Math.round((stats.won / stats.played) * 100) : 0;
-  const normalBuckets = stats.buckets.normal;
-  const hardBuckets = stats.buckets.hard;
-  const maxNormal = Math.max(1, ...normalBuckets);
-  const maxHard = Math.max(1, ...hardBuckets);
-
-  const distHtml = (buckets, times, max) => buckets.map((c, i) => `
-    <div class="quiz-dist-row">
-      <div class="quiz-dist-label">${times[i]}s</div>
-      <div class="quiz-dist-track"><div class="quiz-dist-fill" style="width:${(c / max) * 100}%"></div></div>
-      <div class="quiz-dist-count">${c}</div>
-    </div>`).join('');
-
-  const historyHtml = stats.history.length ? stats.history.map(h => `
-    <div class="quiz-history-item">
-      <div class="quiz-history-result ${h.a !== null ? 'win' : 'lose'}">${h.a !== null ? '✓' : '✕'}</div>
-      <div class="quiz-history-info">
-        <div class="quiz-history-name">${escapeHtml(h.l === 'jp' ? h.jp : h.en)}</div>
-        <div class="quiz-history-meta">${h.m === 'hard' ? 'Hard' : 'Normal'} · ${h.l === 'jp' ? 'JP' : 'EN'}${h.a !== null ? ' · solved at ' + NORMAL_TIMES[h.a] + 's' : ''}</div>
-      </div>
-    </div>`).join('') : '<p class="quiz-empty">No games played yet.</p>';
-
-  pc.innerHTML = `
-    <h3>Your Scores</h3>
-    <div class="quiz-stats-grid" style="margin-bottom:18px;">
-      <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.played}</div><div class="quiz-stat-label">Played</div></div>
-      <div class="quiz-stat-card"><div class="quiz-stat-value">${winPct}%</div><div class="quiz-stat-label">Win rate</div></div>
-      <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.streak}</div><div class="quiz-stat-label">Current streak</div></div>
-      <div class="quiz-stat-card"><div class="quiz-stat-value">${stats.bestStreak}</div><div class="quiz-stat-label">Best streak</div></div>
-    </div>
-
-    <h4>Solved-at distribution · Normal</h4>
-    ${distHtml(normalBuckets, NORMAL_TIMES, maxNormal)}
-
-    <h4>Solved-at distribution · Hard</h4>
-    ${distHtml(hardBuckets, NORMAL_TIMES, maxHard)}
-
-    <h4>Recent games</h4>
-    <div style="display:flex;flex-direction:column;gap:6px;">${historyHtml}</div>
-
-    ${stats.played ? '<button class="expand-btn" style="margin-top:14px;" onclick="resetStats()">Reset scores</button>' : ''}
-  `;
-  refreshContentAnim(pc);
-}
-
-// stop any playing snippet whenever the panel closes or a character opens
-const _origClosePanel = closePanel;
-closePanel = function () { stopSnippet(); _origClosePanel(); };
-const _origOpenChar = openChar;
-openChar = function (id) { stopSnippet(); _origOpenChar(id); };
-</script>
+            <h4>Solved-at distribution · Normal</h4>
+            ${distHtml(normalBuckets, NORMAL_TIMES, maxNormal)}
+
+            <h4>Solved-at distribution · Hard</h4>
+            ${distHtml(hardBuckets, NORMAL_TIMES, maxHard)}
+
+            <h4>Recent games</h4>
+            <div style="display:flex;flex-direction:column;gap:6px;">${historyHtml}</div>
+
+            ${stats.played ? '<button class="expand-btn" style="margin-top:14px;" onclick="resetStats()">Reset scores</button>' : ''}
+          `;
+            refreshContentAnim(pc);
+        }
+
+        const _origClosePanel = closePanel;
+        closePanel = function() { stopSnippet();
+            _origClosePanel(); };
+        const _origOpenChar = openChar;
+        openChar = function(id) { stopSnippet();
+            _origOpenChar(id); };
+    </script>
 </body>
 </html>
